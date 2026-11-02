@@ -1,7 +1,10 @@
 <div class="studio">
   <aside class="panel planet-panel">
     <h2>Planets</h2>
-    <p class="lede">Visibility only. Distances and speeds are the calculated state vectors.</p>
+    <p class="lede">
+      Visibility changes the picture. Mute, solo, and gain change the sound. Distances and speeds
+      are the calculated state vectors.
+    </p>
     <ul class="planet-list">
       @for (planet of planets; track planet.id) {
         <li [class.pulsed]="isPulsed(planet.id)" [class.dimmed]="isHidden(planet.id)">
@@ -29,6 +32,50 @@
                 <dd>{{ formatLongitude(state.heliocentricLongitudeRad) }}°</dd>
               </div>
             </dl>
+            <div class="mixer">
+              <div class="check-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    [checked]="sound.mixFor(planet.id).muted"
+                    (change)="setMuted(planet.id, $event)"
+                  />
+                  Mute
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    [checked]="sound.mixFor(planet.id).solo"
+                    (change)="setSolo(planet.id, $event)"
+                  />
+                  Solo
+                </label>
+              </div>
+              <label class="stack-field">
+                Gain
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  [value]="sound.mixFor(planet.id).gain"
+                  (input)="setPlanetGain(planet.id, $event)"
+                />
+              </label>
+              @if (sound.mode() === 'musical') {
+                <label class="stack-field">
+                  Instrument
+                  <select
+                    [value]="sound.mixFor(planet.id).instrument"
+                    (change)="chooseInstrument(planet.id, $event)"
+                  >
+                    @for (instrument of instruments; track instrument.id) {
+                      <option [value]="instrument.id">{{ instrument.label }}</option>
+                    }
+                  </select>
+                </label>
+              }
+            </div>
           }
         </li>
       }
@@ -68,11 +115,210 @@
         {{ showTrails() ? 'Hide trails' : 'Show trails' }}
       </button>
     </div>
+
+    <h3>Sound</h3>
+    <p class="lede">
+      Press Play. Musical mode keeps each planet’s scale degree and puts Neptune low and Mercury
+      high, so a new scale retunes the chord. Tempo is how long a crossing rings. Simulation speed
+      only moves the date.
+    </p>
+    @if (audio.error(); as audioError) {
+      <p class="caution" role="alert">{{ audioError }}</p>
+    }
+    <div class="sound-controls">
+      <label class="stack-field">
+        Listening
+        <select [value]="sound.mode()" (change)="chooseMode($event)">
+          <option value="scientific">Scientific</option>
+          <option value="musical">Musical</option>
+        </select>
+      </label>
+      @if (sound.mode() === 'musical') {
+        <label class="stack-field">
+          Scale
+          <select [value]="sound.scale()" (change)="chooseScale($event)">
+            @for (scale of scales; track scale.id) {
+              <option [value]="scale.id">{{ scale.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="stack-field">
+          Root
+          <select [value]="sound.rootPitchClass()" (change)="chooseRoot($event)">
+            @for (root of roots; track root.pitchClass) {
+              <option [value]="root.pitchClass">{{ root.label }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" [checked]="sound.quantize()" (change)="setQuantize($event)" />
+          Quantize
+        </label>
+      }
+      <label class="stack-field">
+        Pitch mapping
+        <select [value]="sound.mapping()" (change)="chooseMapping($event)">
+          <option value="octave-fold">Octave fold</option>
+          <option value="uniform">Uniform scale</option>
+        </select>
+      </label>
+      @if (sound.mapping() === 'octave-fold') {
+        <label class="stack-field">
+          Register
+          <select [value]="sound.register()" (change)="chooseRegister($event)">
+            @for (register of registers; track register.id) {
+              <option [value]="register.id">{{ register.label }}</option>
+            }
+          </select>
+        </label>
+      }
+      <p class="formula span-2">{{ sound.mappingSummary() }}</p>
+      <div class="check-row">
+        <label>
+          <input
+            type="checkbox"
+            [checked]="sound.drones()"
+            (change)="setFlag('drones', $event)"
+          />
+          Drones
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            [checked]="sound.pulses()"
+            (change)="setFlag('pulses', $event)"
+          />
+          Meridian pulses
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            [checked]="sound.alignments()"
+            (change)="setFlag('alignments', $event)"
+          />
+          Alignments
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            [checked]="sound.motion() === 'velocity'"
+            (change)="setVelocity($event)"
+          />
+          Follow angular speed
+        </label>
+      </div>
+      @if (sound.motion() === 'velocity') {
+        <label class="stack-field">
+          Speed depth
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            [value]="sound.modulationDepth()"
+            (input)="setDepth($event)"
+          />
+        </label>
+        <p class="formula span-2">Pitch uses ω = |r × v| / |r|², compared with the mean motion 2π/P.</p>
+      }
+      @if (sound.mode() === 'musical') {
+        <label class="stack-field">
+          Harmony
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            [value]="sound.harmony()"
+            (input)="setHarmony($event)"
+          />
+        </label>
+        <label class="stack-field">
+          Tempo (beats per minute)
+          <input
+            type="number"
+            min="24"
+            max="240"
+            step="1"
+            [value]="sound.tempoBpm()"
+            (change)="setTempo($event)"
+          />
+        </label>
+        <label class="stack-field">
+          Note length
+          <select [value]="sound.beats()" (change)="chooseBeats($event)">
+            @for (beat of beats; track beat.value) {
+              <option [value]="beat.value">{{ beat.label }}</option>
+            }
+          </select>
+        </label>
+      }
+      <label class="stack-field">
+        Audio seconds per simulated day
+        <input
+          type="number"
+          min="0.01"
+          max="1"
+          step="0.01"
+          [value]="sound.compressionSecondsPerDay()"
+          (change)="setCompression($event)"
+        />
+      </label>
+      <label class="stack-field">
+        Master
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          [value]="sound.masterGain()"
+          (input)="setMaster($event)"
+        />
+      </label>
+      <label class="stack-field">
+        Reverb
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          [value]="sound.reverb()"
+          (input)="setReverb($event)"
+        />
+      </label>
+      <label class="stack-field">
+        Delay
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          [value]="sound.delay()"
+          (input)="setDelay($event)"
+        />
+      </label>
+    </div>
+    <ul class="pitch-list">
+      @for (pitch of pitches(); track pitch.planetId) {
+        <li>
+          <strong>{{ planetName(pitch.planetId) }}</strong>
+          {{ formatHz(pitch.orbitalFrequencyHz) }} → {{ formatHz(pitch.audibleFrequencyHz) }}
+          @if (pitch.noteName) {
+            <span>{{ pitch.noteName }}</span>
+          }
+          <span class="formula">{{ pitch.formula }}</span>
+          @if (pitch.audibleFrequencyHz < 20) {
+            <span class="below-hearing">Below the usual hearing range.</span>
+          }
+        </li>
+      }
+    </ul>
+
     <h3>Crossings</h3>
     <p class="lede">
       Reference crossings use ecliptic longitude 0°. A revolution returns a planet to the longitude
-      it had at the last seek or reset. Alignments compare those longitudes. Sound is not generated
-      in this version.
+      it had at the last seek or reset. Alignments compare those longitudes. A sounding pulse is
+      placed on the audio clock at the fraction of the step where the crossing fell.
     </p>
     @if (simulation.omittedEventCount() > 0) {
       <p class="caution" role="status">

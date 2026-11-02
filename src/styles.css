@@ -29,7 +29,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
   color: inherit;
 }
@@ -339,6 +340,81 @@ h3 {
   font-size: 0.86rem;
 }
 
+select {
+  background: #1b2636;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.28rem 0.4rem;
+}
+
+.sound-controls,
+.mixer {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.sound-controls {
+  grid-template-columns: 1fr 1fr;
+}
+
+.sound-controls .span-2,
+.sound-controls .check-row {
+  grid-column: 1 / -1;
+}
+
+.sound-controls .stack-field,
+.mixer .stack-field {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+
+.sound-controls .check-row label,
+.mixer .check-row label,
+.sound-controls > label:not(.stack-field) {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+input[type='range'] {
+  width: 100%;
+  accent-color: var(--gold);
+}
+
+.pitch-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pitch-list li {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.formula {
+  display: block;
+  color: var(--muted);
+}
+
+.below-hearing {
+  display: block;
+  color: var(--gold);
+}
+
 .about {
   max-width: 42rem;
   margin: 0 auto;
@@ -383,5 +459,42 @@ h3 {
   .stage {
     min-height: 420px;
     order: -1;
+  }
+}
+
+@media (min-width: 981px) {
+  .app-shell {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  router-outlet {
+    display: none;
+  }
+
+  app-studio {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  app-about {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .studio {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .stage,
+  .panel {
+    min-height: 0;
   }
 }

@@ -6,6 +6,8 @@ export interface StudioPreferences {
   hiddenPlanetIds: string[];
   showOrbits: boolean;
   showTrails: boolean;
+  /** Absent on saves from before sound existed. The sound service validates it. */
+  sound?: unknown;
 }
 
 export function loadPreferences(): StudioPreferences | null {

@@ -2,7 +2,8 @@ import { PlanetaryState } from './planetary-state';
 
 /**
  * Contract shared by the scientific and musical engines.
- * Milestone 1 defines the contract and does not synthesize sound.
+ * `durationSeconds` of 0 is a sustained drone. Pulses carry a positive duration.
+ * The engines report pitches. The audio session is what schedules them.
  */
 export interface SonificationEvent {
   planetId: string;

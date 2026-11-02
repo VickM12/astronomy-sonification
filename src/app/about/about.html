@@ -9,17 +9,20 @@
   </p>
   <p>
     The time you set is UTC. Astronomy Engine then converts that instant to Terrestrial Time for
-    the ephemeris. Sidereal periods, used later for orbital frequencies, are the NASA NSSDCA
+    the ephemeris. Sidereal periods, used for orbital frequencies, are the NASA NSSDCA
     values, not the tropical periods printed in the summary fact sheet.
   </p>
   <p>
-    Playback speed is simulated days per real-time second. It is separate from any future musical
-    tempo. Seeking rebuilds the longitude anchors, so a jump does not fire the crossings it
+    Playback speed is simulated days per real-time second. Tempo chooses how long a crossing
+    rings. The audio-seconds-per-day control spaces those notes on the audio clock. The three are
+    separate. Seeking rebuilds the longitude anchors, so a jump does not fire the crossings it
     skipped, and the next step can detect those crossings again.
   </p>
   <p>
-    Scientific pitch, musical scales, synthesis, and export are later milestones. They will read
-    this same simulation. They will not replace it with a prettier orbit.
+    Press Play to hear the orbits. Scientific mode maps each sidereal frequency into sound, either
+    by one shared scale factor or by folding each planet into a chosen octave. Musical mode starts
+    from that same mapping and can snap the pitches to a scale. The formulas and the resulting
+    hertz stay in the observation panel. Export to WAV or MIDI is still ahead.
   </p>
   <p><a routerLink="/">Return to the observatory</a></p>
 </article>

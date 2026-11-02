@@ -154,4 +154,20 @@ describe('OrbitalSimulationService', () => {
       simulation.pause();
     }
   });
+
+  it('reports each committed step and does not replay crossings on a seek', () => {
+    const simulation = new OrbitalSimulationService(new AstronomyService());
+    const steps: { days: number; events: number }[] = [];
+    simulation.onStep((step) => {
+      steps.push({ days: step.simulatedDays, events: step.events.length });
+    });
+    simulation.setEpoch(START);
+    expect(steps.at(-1)).toEqual({ days: 0, events: 0 });
+    const events = simulation.advanceDays(10, 0.5);
+    expect(steps.at(-1)).toEqual({ days: 10, events: events.length });
+    const beforeSeek = steps.length;
+    simulation.seek(addUtcDays(START, 80));
+    expect(steps.length).toBe(beforeSeek + 1);
+    expect(steps.at(-1)).toEqual({ days: 0, events: 0 });
+  });
 });

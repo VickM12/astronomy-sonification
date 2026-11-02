@@ -1,8 +1,6 @@
 # Harmonia Mundi
 
-A browser observatory that places Mercury through Neptune from calculated orbits and, in later milestones, turns those orbits into sound.
-
-This repository is Milestone 1. The shared astronomical simulation is running. Scientific and musical audio are not.
+A browser observatory that places Mercury through Neptune from calculated orbits and turns those orbits into sound.
 
 ## Requirements
 
@@ -26,12 +24,13 @@ npm run build
 ## What you can do
 
 - Read heliocentric positions, speeds, and ecliptic longitudes for a UTC date.
-- Play, pause, step, and change the simulation speed in days per real-time second.
-- Jump to today, type another UTC instant, or reset to the date you last entered.
-- Hide planets, orbit samples, and trails. Those controls change the picture only.
+- Press Play. Scientific mode sounds each planet from its sidereal frequency. Musical mode snaps those pitches to a scale.
+- Play, pause, step, and change the simulation speed in days per real-time second. Tempo and audio-seconds-per-day are separate controls.
+- Jump to today, type another UTC instant, or reset to the date you last entered. A seek does not replay the crossings it skipped.
+- Hide planets, orbit samples, and trails. Mute, solo, and gain change what you hear.
 - Drag the view to orbit the Sun, and scroll to zoom. Distances are square-root compressed and planet sizes are exaggerated. The view says so.
 
-Settings are stored in the browser under `harmonia-mundi.preferences.v1`.
+Settings are stored in the browser under `harmonia-mundi.preferences.v1`. Older saves without a sound block still load.
 
 ## Time
 

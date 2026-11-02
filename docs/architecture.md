@@ -1,15 +1,15 @@
 # Architecture
 
-Harmonia Mundi is an Angular 21 application with standalone components. There is no backend. Five layers stay separate so a later audio engine can subscribe to the simulation without calculating orbits of its own.
+Harmonia Mundi is an Angular 21 application with standalone components. There is no backend. The orrery and the audio session both read one simulation.
 
 ```text
 UTC date
   → AstronomyService
   → OrbitalSimulationService
-  → Studio panels and SolarSystemView
+  → Studio panels, SolarSystemView, and SonificationSession
 ```
 
-Audio will sit beside the view, reading the same states and events. It is not implemented.
+`requestAnimationFrame` draws the orrery. It does not advance the orbits and it does not schedule notes. The simulation interval reports a step. Pulse times are then offsets on the Web Audio clock.
 
 ## Packages
 
@@ -19,8 +19,7 @@ Audio will sit beside the view, reading the same states and events. It is not im
 | `astronomy-engine` | 2.1.19 | VSOP87 heliocentric state vectors |
 | `three` | 0.187.0 | Orrery rendering |
 | Vitest | 4, via `@angular/build:unit-test` | Unit tests |
-
-`tone` 15.1.22 is the planned synthesis library. It is not installed yet.
+| `tone` | 15.1.22 | Synthesis, limiter, reverb, and delay |
 
 Angular 22.2 is the current stable line, but it requires Node `^22.22.3`, `^24.15.0`, or `^26`. This environment is Node 24.14.1, so the app stays on Angular 21.2, the newest stable line that accepts that runtime.
 
@@ -62,7 +61,7 @@ Crossings use a half-open interval `(previous, next]`:
 - conjunction: the difference of two unwrapped longitudes crosses a multiple of `2π`
 - opposition: that difference crosses `π` plus a multiple of `2π`
 
-The time of a crossing is the linear fraction of longitude between the two samples. A later audio engine can schedule from that timestamp. It is not yet a musical event.
+The time of a crossing is the linear fraction of longitude between the two samples. `SonificationSession` turns that fraction into an audio-clock offset: `|simulated days| × audio seconds per day`. A seek emits a step with no events, so the jump itself stays silent.
 
 If a step contains more than 5000 crossings, the extras are counted in `omittedEventCount` and the positions at the end of the step are still the calculated states.
 
@@ -76,9 +75,9 @@ Orbit lines are rebuilt when the epoch or the orbit toggle changes, not on every
 
 ## Interface
 
-`Studio` is the observatory route. `About` explains the time base and the boundary of this milestone. Preferences live in `localStorage` under `harmonia-mundi.preferences.v1`.
+`Studio` is the observatory route. `About` explains the time base. Preferences live in `localStorage` under `harmonia-mundi.preferences.v1`. A sound block is stored with them. A save from before that block still loads.
 
-`SonificationEngine` is declared in `domain/sonification.ts` so the later engines share one event shape. Nothing implements it yet.
+`ScientificSonificationEngine` and `MusicalSonificationEngine` implement `SonificationEngine`. `ToneAudioBackend` owns the Web Audio graph and is created on Play. Unit tests use an in-memory backend so they do not need an audio device.
 
 ## Integration risks
 

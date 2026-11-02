@@ -1,10 +1,10 @@
 # Sonification
 
-The music has to be traceable to the ephemeris. This note separates measurements from the mappings that will turn them into sound.
+The music has to be traceable to the ephemeris. This note separates measurements from the mappings that turn them into sound.
 
-## In this milestone
+## Measurements
 
-These quantities are calculated and shown. They are not yet heard.
+These quantities are calculated and shown. The same numbers feed the audio session.
 
 ### State vector
 
@@ -41,11 +41,9 @@ Between samples at `t0` and `t1`, with wrapped longitudes `λ0` and `λ1`:
 t_event = t0 + Δt × (λ_boundary − λ_unwrapped(t0)) / δ
 ```
 
-That time is linear between samples. It is the time a later scheduler will use. It is not a claim that the planet's angular speed was constant, except in the tests that deliberately use uniform motion.
+That time is linear between samples. It is the fraction the audio session uses. It is not a claim that the planet's angular speed was constant, except in the tests that deliberately use uniform motion.
 
-## Planned for scientific playback
-
-Not implemented. No frequency in the app is an audible pitch yet.
+## Scientific playback
 
 Orbital frequency, in hertz:
 
@@ -55,13 +53,13 @@ f_orbit = 1 / (P × 86400)
 
 `P × 86400` is the sidereal period in seconds. These frequencies are far below hearing.
 
-Uniform scaling, one constant `K` for every planet:
+Uniform scaling, one constant `K` for every planet. `K` places Earth at 110 Hz:
 
 ```text
 f_audio = f_orbit × K
 ```
 
-This keeps the exact period ratios. It does not promise that every planet falls inside the audible band.
+This keeps the exact period ratios. Outer planets can fall below the usual hearing range. The panel says so when a pitch is under 20 Hz.
 
 Octave folding, an integer `n` chosen per planet:
 
@@ -69,30 +67,37 @@ Octave folding, an integer `n` chosen per planet:
 f_audio = f_orbit × 2^n
 ```
 
-`n` will be chosen so `f_audio` lands in a register the listener selects. Folding each planet by its own `n` keeps octave equivalence and changes the absolute frequency ratios. The panel will say that explicitly.
+`n` is chosen so `f_audio` lands in the selected register (55–110 Hz, 110–220 Hz, or 220–440 Hz). Folding each planet by its own `n` keeps octave equivalence and changes the absolute frequency ratios. The panel states that.
 
-Instantaneous angular speed, for velocity-modulated pitch, will be taken from the state vector:
+Instantaneous angular speed comes from the state vector:
 
 ```text
 ω = |r × v| / |r|²
+f = f_base × (1 + depth × (ω / ω_mean − 1))
 ```
 
-with `r` and `v` the ecliptic position and velocity. A constant-speed circular orbit will not be used. The modulation will be a documented function of `ω / ω_mean` and a depth control, with the source value and the resulting hertz both visible.
+`ω_mean` is `2π / P`. Depth 0 leaves the pitch fixed. The panel shows `ω`, the formula, and the audible hertz.
 
-Continuous drones, meridian pulses, and alignment accents will be independent toggles. They will consume `PlanetaryState` and `OrbitalEvent`. They will not advance the simulation clock.
+Continuous drones, meridian pulses (reference meridian and revolution), and alignment accents (conjunction and opposition) are independent toggles. They consume `PlanetaryState` and `OrbitalEvent`. They do not advance the simulation clock.
 
-## Planned for musical playback
+## Musical playback
 
-Not implemented.
+Candidate pitch starts from the scientific mapping above, then optionally quantizes to a chromatic scale, a major scale, a natural minor scale, or a pentatonic scale. The root note is selectable. Turning quantization off leaves the scientific candidate. Random chord progressions are not used.
 
-Candidate pitch will start from `f_orbit` or from the scaled scientific frequency, then optionally quantize to a chromatic scale, a major scale, a natural minor scale, a pentatonic scale, or no scale at all. The root note will be selectable. Random chord progressions will not be used.
+Rhythm comes from the crossing events. Each note's length is `60 / BPM × beats`. Its place on the audio clock is:
 
-Rhythm will come from the crossing events above. A separate compression control will map simulation time onto audio time. That control is not the simulation speed, and it is not a BPM.
+```text
+t_audio = t_now + fraction × |Δdays| × compression
+```
 
-Harmony will be the set of planetary pitches that are active together, with optional octave moves and scale quantization for voice leading.
+`fraction` is where the crossing sits between the two samples. `compression` is audio seconds per simulated day. BPM is not that control, and simulation speed is not that control.
 
-MIDI cannot store every scientific frequency. When MIDI export exists, the documentation will state the note-number or pitch-bend approximation. Scientific drones will remain available as audio even when MIDI is a poor fit.
+Harmony is the set of planetary pitches sounding together. Musical mode first places each planet in its own octave, Neptune lowest and Mercury highest, keeping the pitch class that came from the orbit. A scale change retunes those pitch classes in place. A harmony amount can still move a later planet up by whole octaves when two pitches sit closer than a deterministic semitone gap.
+
+Bell sounds an octave above the candidate. Bass sounds an octave below. Sine, pad, and pluck keep the candidate and change the waveform and the pulse envelope.
+
+MIDI cannot store every scientific frequency. When MIDI export exists, the documentation will state the note-number or pitch-bend approximation. Scientific drones remain available as audio even when MIDI is a poor fit. WAV and MIDI export are not in this build.
 
 ## Clocks
 
-Simulation time and audio time will stay separate. `requestAnimationFrame` draws the orrery. It does not schedule sound and it does not integrate the orbits. Precise musical timing, once there is sound, will use the Web Audio clock rather than `setTimeout`.
+Simulation time and audio time stay separate. `requestAnimationFrame` draws the orrery. It does not schedule sound and it does not integrate the orbits. The simulation interval is when a crossing becomes known. The Web Audio clock is when it sounds. `setTimeout` is used only to clear the on-screen flash.

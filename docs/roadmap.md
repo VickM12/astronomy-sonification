@@ -17,7 +17,7 @@ Acceptance: the eight planets are drawn from calculated positions for a chosen U
 
 ## Milestone 2 — Scientific audio
 
-Status: not started.
+Status: implemented for live playback.
 
 - Uniform scaling and octave folding of `1 / (P × 86400)`.
 - Velocity-modulated pitch from `r × v`.
@@ -28,10 +28,10 @@ Status: not started.
 
 ## Milestone 3 — Musical interpretation
 
-Status: not started.
+Status: implemented for live playback.
 
 - Scale quantization that can be turned off.
-- Crossing events as rhythm, with a time-compression control that is not the simulation speed.
+- Crossing events as rhythm, with an audio-seconds-per-day control that is neither the simulation speed nor the BPM.
 - Harmony from the pitches that are sounding together.
 - Per-planet instrument, mute, solo, and gain.
 

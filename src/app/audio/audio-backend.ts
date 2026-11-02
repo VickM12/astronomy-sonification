@@ -1,0 +1,17 @@
+import { DroneInstruction, PulseInstruction } from '../sonification/plan';
+
+/**
+ * The synthesis graph behind the audio service.
+ * Tests supply an in-memory implementation. The browser uses Tone.js.
+ */
+export interface AudioBackend {
+  readonly running: boolean;
+  start(): Promise<void>;
+  currentTime(): number;
+  setMix(masterGain: number, reverb: number, delay: number): void;
+  syncDrones(drones: readonly DroneInstruction[]): void;
+  silenceDrones(): void;
+  schedulePulse(pulse: PulseInstruction): void;
+  cutPulses(): void;
+  dispose(): void;
+}
