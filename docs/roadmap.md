@@ -49,8 +49,10 @@ Status: not started.
 
 ## Milestone 5 — Export
 
-Status: not started.
+Status: spectral image and MusicXML sheet music are in the observation panel. WAV, MIDI, and JSON presets are not started.
 
+- Spectral SVG of the sounding hertz over a chosen span, with ticks for pulses that would play.
+- MusicXML of the nearest equal-tempered notes, with the approximation written on the score.
 - Offline WAV render.
 - MIDI, with the pitch approximation written down.
 - JSON preset import and export.

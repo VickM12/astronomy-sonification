@@ -329,6 +329,28 @@
       }
     </ul>
 
+    <h3>Export</h3>
+    <p class="lede">
+      The spectral image draws the sounding hertz across the span, with ticks where a meridian
+      pulse or alignment would play. Sheet music writes the nearest staff note to that hertz and
+      says so on the page. Open the MusicXML file in a notation program.
+    </p>
+    <div class="export-row">
+      <label class="stack-field">
+        Span (days)
+        <input
+          type="number"
+          min="1"
+          max="2000"
+          step="1"
+          [value]="exportDays()"
+          (change)="setExportDays($event)"
+        />
+      </label>
+      <button type="button" (click)="exportSpectrum()">Spectral image</button>
+      <button type="button" (click)="exportSheet()">Sheet music</button>
+    </div>
+
     <h3>Crossings</h3>
     <p class="lede">
       Reference crossings use ecliptic longitude 0°. A revolution returns a planet to the longitude

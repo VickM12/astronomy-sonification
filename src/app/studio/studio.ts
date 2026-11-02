@@ -5,6 +5,12 @@ import { AudioEngineService } from '../audio/audio-engine.service';
 import { SonificationSession } from '../audio/sonification-session';
 import { SoundSettingsService } from '../audio/sound-settings.service';
 import { describeOrbitalEvent } from '../domain/orbital-event';
+import {
+  buildMusicXml,
+  buildSpectrumSvg,
+  captureSonification,
+  downloadText,
+} from '../export/sonification-score';
 import { MOONS, isMoonId } from '../domain/moons';
 import { PLANETS, planetName } from '../domain/planets';
 import { findNextAlignment } from '../simulation/find-alignment';
@@ -42,6 +48,7 @@ export class Studio implements OnDestroy {
   protected readonly epochText = signal('');
   protected readonly pulsed = signal<ReadonlySet<string>>(new Set());
   protected readonly alignmentText = signal<string | null>(null);
+  protected readonly exportDays = signal(365);
 
   protected readonly bodies = computed(() =>
     this.simulation.moonsEnabled() ? [...PLANETS, ...MOONS] : [...PLANETS],
@@ -425,6 +432,49 @@ export class Studio implements OnDestroy {
     if (value !== null) {
       this.sound.setGain(id, value);
       this.remember();
+    }
+  }
+
+  protected setExportDays(event: Event): void {
+    const value = numberFrom(event);
+    if (value !== null) {
+      this.exportDays.set(Math.min(2000, Math.max(1, Math.round(value))));
+    }
+  }
+
+  protected exportSpectrum(): void {
+    const capture = this.captureScore();
+    if (capture) {
+      downloadText('harmonia-mundi-spectrum.svg', 'image/svg+xml', buildSpectrumSvg(capture));
+    }
+  }
+
+  protected exportSheet(): void {
+    const capture = this.captureScore();
+    if (capture) {
+      downloadText('harmonia-mundi-score.musicxml', 'application/vnd.recordare.musicxml+xml', buildMusicXml(capture));
+    }
+  }
+
+  private captureScore() {
+    const start = this.simulation.simulationTime();
+    if (!start) {
+      return null;
+    }
+    try {
+      return captureSonification(this.astronomy, {
+        start,
+        spanDays: this.exportDays(),
+        includeMoons: this.simulation.moonsEnabled(),
+        pitch: this.sound.pitchSettings(),
+        mixes: this.sound.snapshot().planets,
+        hiddenIds: this.hidden(),
+        pulses: this.sound.pulses(),
+        alignments: this.sound.alignments(),
+      });
+    } catch (error) {
+      this.simulation.error.set(error instanceof Error ? error.message : 'The score could not be built.');
+      return null;
     }
   }
 
