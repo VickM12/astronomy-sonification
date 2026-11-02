@@ -100,7 +100,8 @@ export class ToneAudioBackend implements AudioBackend {
       this.writeDrone(drone);
     }
     for (const [id, voice] of this.voices) {
-      if (!keep.has(id)) {
+      if (!keep.has(id) && voice.lastGain !== 0) {
+        voice.lastGain = 0;
         voice.gain.gain.rampTo(0, 0.05);
       }
     }
@@ -109,12 +110,21 @@ export class ToneAudioBackend implements AudioBackend {
 
   silenceDrones(): void {
     for (const voice of this.voices.values()) {
+      if (voice.lastGain === 0) {
+        continue;
+      }
+      voice.lastGain = 0;
       voice.gain.gain.rampTo(0, 0.04);
     }
+    this.sweepPulses();
   }
 
   schedulePulse(pulse: PulseInstruction): void {
-    if (!this.tone || !this.bus || !this.running || this.pulses.length >= 16) {
+    if (!this.tone || !this.bus || !this.running) {
+      return;
+    }
+    this.sweepPulses();
+    if (this.pulses.length >= 16) {
       return;
     }
     const tone = this.tone;
@@ -131,7 +141,6 @@ export class ToneAudioBackend implements AudioBackend {
     const stopAt = when + duration + 0.45;
     oscillator.stop(stopAt);
     this.pulses.push({ stopAt, nodes: [oscillator, envelope, gain] });
-    this.sweepPulses();
   }
 
   cutPulses(): void {
@@ -194,15 +203,13 @@ export class ToneAudioBackend implements AudioBackend {
     const frequency = safeHz(drone.frequencyHz);
     const cents =
       voice.lastHz > 0 ? Math.abs(1200 * Math.log2(frequency / voice.lastHz)) : 1200;
-    // A scale or mapping change is a jump. Setting the value skips the glide
-    // that the simulation tick would otherwise keep restarting.
-    if (voice.fresh || cents >= 40) {
+    // Assign the frequency directly. A glide scheduled on every simulation
+    // tick never finishes, and the piled-up fades drive the pitch down to silence.
+    if (voice.fresh || cents >= 1) {
       voice.oscillator.frequency.value = frequency;
       voice.fresh = false;
-    } else {
-      voice.oscillator.frequency.rampTo(frequency, 0.12);
+      voice.lastHz = frequency;
     }
-    voice.lastHz = frequency;
     const level = Math.max(0, drone.gain);
     if (level !== voice.lastGain) {
       voice.lastGain = level;

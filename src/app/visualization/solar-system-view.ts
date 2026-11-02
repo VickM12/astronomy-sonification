@@ -214,10 +214,16 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
     }
     this.seenEvents = events;
     const until = performance.now() + PULSE_MS;
+    const visible = new Set(this.visiblePlanetIds());
     for (const event of events) {
-      this.pulseUntil.set(event.planetId, until);
-      if (event.otherPlanetId) {
-        this.pulseUntil.set(event.otherPlanetId, until);
+      const participants = event.otherPlanetId
+        ? [event.planetId, event.otherPlanetId]
+        : [event.planetId];
+      if (participants.some((id) => !visible.has(id))) {
+        continue;
+      }
+      for (const id of participants) {
+        this.pulseUntil.set(id, until);
       }
     }
   }

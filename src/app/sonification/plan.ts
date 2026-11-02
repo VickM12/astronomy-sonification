@@ -34,6 +34,8 @@ export interface PlanInput {
   pitch: PitchSettings;
   mixes: Readonly<Record<PlanetId, PlanetMix> & Record<string, PlanetMix | undefined>>;
   events: readonly OrbitalEvent[];
+  /** Bodies left out of the picture. They are silent, and so are alignments with them. */
+  hiddenIds?: readonly string[];
   previousTime: Date | null;
   time: Date;
   simulatedDays: number;
@@ -104,6 +106,7 @@ export function heardFrequency(
 
 export function buildAudioPlan(input: PlanInput): AudioPlan {
   const readings = readPitches(input.states, input.pitch);
+  const hidden = new Set(input.hiddenIds ?? []);
   const anySolo = Object.values(input.mixes).some((mix) => mix?.solo);
   const duration = noteDurationSeconds(input.tempoBpm, input.beats);
   const drones: DroneInstruction[] = [];
@@ -111,6 +114,9 @@ export function buildAudioPlan(input: PlanInput): AudioPlan {
   if (input.playing && input.dronesEnabled) {
     for (const reading of readings) {
       if (!isPlanetId(reading.planetId) && !isMoonId(reading.planetId)) {
+        continue;
+      }
+      if (hidden.has(reading.planetId)) {
         continue;
       }
       const mix = input.mixes[reading.planetId];
@@ -147,6 +153,9 @@ export function buildAudioPlan(input: PlanInput): AudioPlan {
       continue;
     }
     const ids = [event.planetId, event.otherPlanetId].filter((id): id is string => !!id);
+    if (ids.some((id) => hidden.has(id))) {
+      continue;
+    }
     for (const id of ids) {
       if (pulses.length >= MAX_PULSES || (!isPlanetId(id) && !isMoonId(id))) {
         continue;

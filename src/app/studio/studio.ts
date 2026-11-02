@@ -110,11 +110,19 @@ export class Studio implements OnDestroy {
     }
 
     effect(() => {
+      this.simulation.hiddenIds.set(this.hidden());
+      const hidden = new Set(this.hidden());
       const events = this.simulation.latestEvents();
       const ids = new Set(
-        events.flatMap((event) =>
-          event.otherPlanetId ? [event.planetId, event.otherPlanetId] : [event.planetId],
-        ),
+        events.flatMap((event) => {
+          const participants = event.otherPlanetId
+            ? [event.planetId, event.otherPlanetId]
+            : [event.planetId];
+          if (participants.some((id) => hidden.has(id))) {
+            return [];
+          }
+          return participants;
+        }),
       );
       this.pulsed.set(ids);
       if (this.pulseTimer !== null) {

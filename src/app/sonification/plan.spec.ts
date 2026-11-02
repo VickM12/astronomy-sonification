@@ -180,6 +180,26 @@ describe('audio plan', () => {
     );
   });
 
+  it('stays quiet when an alignment includes an unchecked planet', () => {
+    const alignment: OrbitalEvent = {
+      type: 'conjunction',
+      planetId: 'mercury',
+      otherPlanetId: 'venus',
+      simulationTime: eventTime,
+      longitudeRad: 0,
+    };
+    const dropped = plan({ events: [alignment], hiddenIds: ['venus'] });
+    expect(dropped.pulses).toEqual([]);
+    expect(dropped.drones.find((drone) => drone.planetId === 'venus')).toBeUndefined();
+    expect(dropped.drones.find((drone) => drone.planetId === 'mercury')?.gain).toBeGreaterThan(0);
+
+    const kept = plan({
+      events: [alignment],
+      hiddenIds: ['earth'],
+    });
+    expect(kept.pulses.map((pulse) => pulse.planetId).sort()).toEqual(['mercury', 'venus']);
+  });
+
   it('sounds an alignment only when that toggle is on', () => {
     const alignment: OrbitalEvent = {
       type: 'conjunction',

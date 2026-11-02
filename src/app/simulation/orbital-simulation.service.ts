@@ -43,6 +43,8 @@ export class OrbitalSimulationService {
   readonly omittedEventCount = signal(0);
   readonly error = signal<string | null>(null);
   readonly trailGeneration = signal(0);
+  /** Bodies the studio has unchecked. The clock still tracks them; the audio plan does not sound them. */
+  readonly hiddenIds = signal<readonly string[]>([]);
   /** Off unless the studio turns it on, so planet-only tests stay planet-only. */
   readonly moonsEnabled = signal(false);
 

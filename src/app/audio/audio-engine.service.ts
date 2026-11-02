@@ -69,7 +69,7 @@ export class AudioEngineService {
     if (!this.backend.running || this.disposed) {
       return;
     }
-    this.backend.silenceDrones();
+    this.guard(() => this.backend.silenceDrones());
   }
 
   schedulePulses(pulses: readonly PulseInstruction[]): void {
