@@ -198,4 +198,30 @@ describe('audio plan', () => {
   it('builds the same plan twice', () => {
     expect(JSON.stringify(plan())).toBe(JSON.stringify(plan()));
   });
+
+  it('leaves Galilean moon crossings out of the pulse list', () => {
+    const io: PlanetaryState = {
+      ...state('earth'),
+      id: 'io',
+      name: 'Io',
+      orbitalPeriodDays: 1.769138,
+      frame: 'jovicentric',
+    };
+    const meridian: OrbitalEvent = {
+      type: 'reference-meridian',
+      planetId: 'io',
+      simulationTime: eventTime,
+      longitudeRad: 0,
+    };
+    const conjunction: OrbitalEvent = {
+      type: 'conjunction',
+      planetId: 'io',
+      otherPlanetId: 'europa',
+      simulationTime: eventTime,
+      longitudeRad: 0,
+    };
+    const result = plan({ states: [io], events: [meridian, conjunction] });
+    expect(result.pulses).toEqual([]);
+    expect(result.drones.map((drone) => drone.planetId)).toEqual(['io']);
+  });
 });

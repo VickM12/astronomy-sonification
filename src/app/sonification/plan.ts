@@ -1,6 +1,7 @@
 import { OrbitalEvent } from '../domain/orbital-event';
 import { PlanetaryState } from '../domain/planetary-state';
-import { PLANET_IDS, PlanetId, isPlanetId } from '../domain/planets';
+import { isMoonId } from '../domain/moons';
+import { PlanetId, isPlanetId } from '../domain/planets';
 import { readPitches } from './pitch';
 import { InstrumentId, ListenMode, PitchSettings, PlanetMix } from './sound-model';
 
@@ -31,7 +32,7 @@ export interface AudioPlan {
 export interface PlanInput {
   states: readonly PlanetaryState[];
   pitch: PitchSettings;
-  mixes: Readonly<Record<PlanetId, PlanetMix>>;
+  mixes: Readonly<Record<PlanetId, PlanetMix> & Record<string, PlanetMix | undefined>>;
   events: readonly OrbitalEvent[];
   previousTime: Date | null;
   time: Date;
@@ -103,16 +104,19 @@ export function heardFrequency(
 
 export function buildAudioPlan(input: PlanInput): AudioPlan {
   const readings = readPitches(input.states, input.pitch);
-  const anySolo = PLANET_IDS.some((id) => input.mixes[id].solo);
+  const anySolo = Object.values(input.mixes).some((mix) => mix?.solo);
   const duration = noteDurationSeconds(input.tempoBpm, input.beats);
   const drones: DroneInstruction[] = [];
 
   if (input.playing && input.dronesEnabled) {
     for (const reading of readings) {
-      if (!isPlanetId(reading.planetId)) {
+      if (!isPlanetId(reading.planetId) && !isMoonId(reading.planetId)) {
         continue;
       }
       const mix = input.mixes[reading.planetId];
+      if (!mix) {
+        continue;
+      }
       const instrument = input.pitch.mode === 'musical' ? mix.instrument : 'sine';
       drones.push({
         planetId: reading.planetId,
@@ -130,6 +134,12 @@ export function buildAudioPlan(input: PlanInput): AudioPlan {
       break;
     }
     const alignment = event.type === 'conjunction' || event.type === 'opposition';
+    // A Galilean moon completes an orbit in a couple of days. At playback speed
+    // those crossings would schedule hundreds of notes a second and exhaust the
+    // audio graph. The moons stay in the drone chord; only planets are pulsed.
+    if (isMoonId(event.planetId)) {
+      continue;
+    }
     if (alignment && !input.alignmentsEnabled) {
       continue;
     }
@@ -138,7 +148,7 @@ export function buildAudioPlan(input: PlanInput): AudioPlan {
     }
     const ids = [event.planetId, event.otherPlanetId].filter((id): id is string => !!id);
     for (const id of ids) {
-      if (pulses.length >= MAX_PULSES || !isPlanetId(id)) {
+      if (pulses.length >= MAX_PULSES || (!isPlanetId(id) && !isMoonId(id))) {
         continue;
       }
       const reading = readings.find((item) => item.planetId === id);

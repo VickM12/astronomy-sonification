@@ -35,7 +35,7 @@ Between samples at `t0` and `t1`, with wrapped longitudes `λ0` and `λ1`:
 δ       = δ_short + 2π × round((2π Δt / P − δ_short) / 2π)
 ```
 
-`Δt` is `t1 − t0` in UT days. A reference-meridian event is each multiple of `2π` in the half-open unwrapped interval. A revolution uses the longitude captured at the last seek instead of 0. Conjunction and opposition use the difference of two planets' unwrapped longitudes.
+`Δt` is `t1 − t0` in UT days. A reference-meridian event is each multiple of `2π` in the half-open unwrapped interval. A revolution uses the longitude captured at the last seek instead of 0. Conjunction and opposition use the difference of two unwrapped longitudes in the same frame. Planet longitudes are heliocentric. Galilean moon longitudes are jovicentric, measured from Jupiter toward the J2000 equinox, so a moon is not paired with a planet.
 
 ```text
 t_event = t0 + Δt × (λ_boundary − λ_unwrapped(t0)) / δ
@@ -77,6 +77,20 @@ f = f_base × (1 + depth × (ω / ω_mean − 1))
 ```
 
 `ω_mean` is `2π / P`. Depth 0 leaves the pitch fixed. The panel shows `ω`, the formula, and the audible hertz.
+
+### Galilean moons
+
+Io, Europa, Ganymede, and Callisto use Astronomy Engine `JupiterMoons`. Their positions are jovicentric equatorial vectors rotated with the same EQJ→ECL matrix. `P` is the NASA NSSDCA Jovian Satellite Fact Sheet orbital period in days (retrieved 2026-11-02), not an exact 4:2:1.
+
+They share one multiplier so Ganymede sits at the low edge of the selected register:
+
+```text
+f_audio = f_orbit × (registerLow / f_Ganymede)
+```
+
+Folding each moon into that one octave would turn the near 2:1 pairs into the same pitch. Earth's uniform `K` would push Io above the oscillator cap and break the ratio, so the moons do not use it. Musical mode may quantize these pitches onto the scale. It does not place them in the planetary voice-octave map. Harmony spacing also leaves them where the shared factor put them.
+
+Moon meridian, revolution, and alignment crossings stay in the event log and on the orrery. They are not turned into notes. At playback speed those orbits would schedule hundreds of notes a second. The drone chord is how the moons sound.
 
 Continuous drones, meridian pulses (reference meridian and revolution), and alignment accents (conjunction and opposition) are independent toggles. They consume `PlanetaryState` and `OrbitalEvent`. They do not advance the simulation clock.
 

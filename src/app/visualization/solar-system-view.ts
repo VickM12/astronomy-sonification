@@ -15,6 +15,7 @@ import {
   Line,
   LineBasicMaterial,
   LineLoop,
+  Group,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -28,10 +29,11 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TrajectorySample } from '../astronomy/astronomy.service';
 import { OrbitalEvent } from '../domain/orbital-event';
+import { MOONS, moonProfile } from '../domain/moons';
 import { PLANETS, planetProfile } from '../domain/planets';
 import { PlanetaryState } from '../domain/planetary-state';
 import { OrbitalSimulationService } from '../simulation/orbital-simulation.service';
-import { toScenePosition } from './visual-scale';
+import { moonSceneOffset, toScenePosition } from './visual-scale';
 
 interface PlanetBody {
   mesh: Mesh;
@@ -53,6 +55,7 @@ const PULSE_MS = 700;
 })
 export class SolarSystemView implements AfterViewInit, OnDestroy {
   readonly trajectories = input<readonly TrajectorySample[]>([]);
+  readonly moonTrajectories = input<readonly TrajectorySample[]>([]);
   readonly visiblePlanetIds = input<readonly string[]>([]);
   readonly showOrbits = input(true);
   readonly showTrails = input(true);
@@ -69,10 +72,14 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
   private controls: OrbitControls | null = null;
   private observer: ResizeObserver | null = null;
   private readonly bodies = new Map<string, PlanetBody>();
+  private moonRig: Group | null = null;
   private readonly orbitByPlanet = new Map<string, LineLoop>();
+  private readonly moonOrbitById = new Map<string, LineLoop>();
   private readonly trailByPlanet = new Map<string, { line: Line; points: number[] }>();
   private appliedTrajectories: readonly TrajectorySample[] | null = null;
+  private appliedMoonTrajectories: readonly TrajectorySample[] | null = null;
   private appliedShowOrbits = true;
+  private appliedMoonShowOrbits = true;
   private trailsCleared = false;
   private appliedGeneration = -1;
   private seenEvents: readonly OrbitalEvent[] | null = null;
@@ -102,6 +109,7 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
     this.renderer?.setAnimationLoop(null);
     this.controls?.dispose();
     this.disposeOrbits();
+    this.disposeMoonOrbits();
     this.disposeTrails();
     for (const body of this.bodies.values()) {
       body.mesh.geometry.dispose();
@@ -151,6 +159,22 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
       this.bodies.set(planet.id, { mesh, material, color: planet.sceneColor });
     }
 
+    const moonRig = new Group();
+    scene.add(moonRig);
+    this.moonRig = moonRig;
+    for (const moon of MOONS) {
+      const geometry = new SphereGeometry(moon.sceneRadius, 16, 12);
+      const material = new MeshStandardMaterial({
+        color: moon.sceneColor,
+        roughness: 0.62,
+        metalness: 0.04,
+        emissive: 0x000000,
+      });
+      const mesh = new Mesh(geometry, material);
+      moonRig.add(mesh);
+      this.bodies.set(moon.id, { mesh, material, color: moon.sceneColor });
+    }
+
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
@@ -167,6 +191,7 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
     }
     this.notePulses();
     this.syncOrbits();
+    this.syncMoonOrbits();
     const states = this.simulation.states();
     this.syncBodies(states);
     this.syncTrails(states);
@@ -199,10 +224,25 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
 
   private syncBodies(states: readonly PlanetaryState[]): void {
     const visible = new Set(this.visiblePlanetIds());
+    const present = new Set(states.map((state) => state.id));
     const now = performance.now();
+    const jupiter = states.find((state) => state.id === 'jupiter');
+    const jupiterScene = jupiter ? toScenePosition(jupiter.positionAU) : null;
+    if (this.moonRig && jupiterScene) {
+      this.moonRig.position.set(jupiterScene.x, jupiterScene.y, jupiterScene.z);
+    }
+    for (const [id, body] of this.bodies) {
+      if (!present.has(id)) {
+        body.mesh.visible = false;
+        const orbit = this.orbitByPlanet.get(id) ?? this.moonOrbitById.get(id);
+        if (orbit) {
+          orbit.visible = false;
+        }
+      }
+    }
     for (const state of states) {
       const body = this.bodies.get(state.id);
-      const orbit = this.orbitByPlanet.get(state.id);
+      const orbit = this.orbitByPlanet.get(state.id) ?? this.moonOrbitById.get(state.id);
       if (!body) {
         continue;
       }
@@ -211,8 +251,13 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
       if (orbit) {
         orbit.visible = show && this.showOrbits();
       }
-      const scenePoint = toScenePosition(state.positionAU);
-      body.mesh.position.set(scenePoint.x, scenePoint.y, scenePoint.z);
+      if (state.frame === 'jovicentric') {
+        const offset = moonSceneOffset(state.positionAU);
+        body.mesh.position.set(offset.x, offset.y, offset.z);
+      } else {
+        const scenePoint = toScenePosition(state.positionAU);
+        body.mesh.position.set(scenePoint.x, scenePoint.y, scenePoint.z);
+      }
       const pulsing = (this.pulseUntil.get(state.id) ?? 0) > now;
       body.material.emissive.setHex(pulsing ? 0xffe7b8 : 0x000000);
       body.material.emissiveIntensity = pulsing ? 0.9 : 0;
@@ -260,6 +305,40 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
     }
   }
 
+  private syncMoonOrbits(): void {
+    const trajectories = this.moonTrajectories();
+    const showOrbits = this.showOrbits();
+    if (trajectories === this.appliedMoonTrajectories && showOrbits === this.appliedMoonShowOrbits) {
+      return;
+    }
+    this.appliedMoonTrajectories = trajectories;
+    this.appliedMoonShowOrbits = showOrbits;
+    this.disposeMoonOrbits();
+    if (!this.moonRig || !showOrbits) {
+      return;
+    }
+    for (const trajectory of trajectories) {
+      const profile = moonProfile(trajectory.planetId);
+      const positions = new Float32Array(trajectory.positionsAU.length * 3);
+      trajectory.positionsAU.forEach((point, index) => {
+        const scenePoint = moonSceneOffset(point);
+        positions[index * 3] = scenePoint.x;
+        positions[index * 3 + 1] = scenePoint.y;
+        positions[index * 3 + 2] = scenePoint.z;
+      });
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(positions, 3));
+      const material = new LineBasicMaterial({
+        color: profile?.sceneColor ?? 0x9eb0c4,
+        transparent: true,
+        opacity: 0.55,
+      });
+      const line = new LineLoop(geometry, material);
+      this.moonRig.add(line);
+      this.moonOrbitById.set(trajectory.planetId, line);
+    }
+  }
+
   private syncTrails(states: readonly PlanetaryState[]): void {
     if (!this.showTrails() || !this.scene) {
       if (!this.trailsCleared) {
@@ -278,11 +357,16 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
     }
     this.lastTrailTime = stamp;
     const visible = new Set(this.visiblePlanetIds());
+    const jupiter = states.find((state) => state.id === 'jupiter');
+    const jupiterScene = jupiter ? toScenePosition(jupiter.positionAU) : null;
     for (const state of states) {
       if (!visible.has(state.id)) {
         continue;
       }
-      const scenePoint = toScenePosition(state.positionAU);
+      const scenePoint =
+        state.frame === 'jovicentric' && jupiterScene
+          ? addOffset(jupiterScene, moonSceneOffset(state.positionAU))
+          : toScenePosition(state.positionAU);
       const trail = this.trailFor(state.id);
       trail.points.push(scenePoint.x, scenePoint.y, scenePoint.z);
       const extra = trail.points.length / 3 - TRAIL_LIMIT;
@@ -299,7 +383,7 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
       return existing;
     }
     const geometry = new BufferGeometry();
-    const profile = planetProfile(planetId);
+    const profile = planetProfile(planetId) ?? moonProfile(planetId);
     const material = new LineBasicMaterial({
       color: profile?.sceneColor ?? 0xffffff,
       transparent: true,
@@ -341,6 +425,17 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
     this.orbitByPlanet.clear();
   }
 
+  private disposeMoonOrbits(): void {
+    for (const line of this.moonOrbitById.values()) {
+      line.parent?.remove(line);
+      line.geometry.dispose();
+      if (line.material instanceof LineBasicMaterial) {
+        line.material.dispose();
+      }
+    }
+    this.moonOrbitById.clear();
+  }
+
   private disposeTrails(): void {
     if (!this.scene) {
       this.trailByPlanet.clear();
@@ -367,4 +462,11 @@ export class SolarSystemView implements AfterViewInit, OnDestroy {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
   }
+}
+
+function addOffset(
+  origin: { x: number; y: number; z: number },
+  offset: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } {
+  return { x: origin.x + offset.x, y: origin.y + offset.y, z: origin.z + offset.z };
 }

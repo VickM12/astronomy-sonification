@@ -87,4 +87,20 @@ describe('AudioEngineService', () => {
     expect(backend.disposed).toBe(1);
     await expect(engine.start()).resolves.toBe(false);
   });
+
+  it('stops scheduling once sixteen pulses are still sounding', async () => {
+    const backend = new MemoryBackend();
+    const engine = new AudioEngineService(backend);
+    await engine.start();
+    const burst = Array.from({ length: 20 }, () => pulse);
+    engine.schedulePulses(burst);
+    expect(backend.pulses).toHaveLength(16);
+
+    engine.schedulePulses([pulse]);
+    expect(backend.pulses).toHaveLength(16);
+
+    backend.time = 10;
+    engine.schedulePulses([pulse]);
+    expect(backend.pulses).toHaveLength(17);
+  });
 });

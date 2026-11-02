@@ -15,6 +15,8 @@ Status: implemented.
 
 Acceptance: the eight planets are drawn from calculated positions for a chosen UTC date and move when the simulation clock runs.
 
+Also in this build: Jupiter's Galilean moons, from `JupiterMoons`, drawn around Jupiter and pitched with one shared factor so their period ratios stay intact. Next alignment seeks to the next planet–planet conjunction or opposition.
+
 ## Milestone 2 — Scientific audio
 
 Status: implemented for live playback.

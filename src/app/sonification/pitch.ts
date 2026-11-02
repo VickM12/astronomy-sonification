@@ -1,3 +1,4 @@
+import { MOON_ORBITAL_PERIOD_DAYS, isMoonId } from '../domain/moons';
 import { PlanetaryState } from '../domain/planetary-state';
 import {
   angularSpeedRadPerDay,
@@ -52,17 +53,23 @@ export function readPitches(
       return [];
     }
     const orbital = orbitalFrequencyHz(state.orbitalPeriodDays);
+    const moon = isMoonId(state.id);
     const folded =
-      settings.mapping === 'octave-fold'
+      !moon && settings.mapping === 'octave-fold'
         ? foldIntoRegister(orbital, settings.registerLowHz, settings.registerHighHz)
         : null;
-    const scaled = folded ? folded.frequencyHz : uniformScale(orbital, settings.uniformK);
+    const ganymedeHz = orbitalFrequencyHz(MOON_ORBITAL_PERIOD_DAYS.ganymede);
+    const scaled = moon
+      ? orbital * (settings.registerLowHz / ganymedeHz)
+      : folded
+        ? folded.frequencyHz
+        : uniformScale(orbital, settings.uniformK);
     const angular = angularSpeedRadPerDay(state.positionAU, state.velocityAUPerDay);
     const mean = meanMotionRadPerDay(state.orbitalPeriodDays);
     const depth = settings.motion === 'velocity' ? settings.modulationDepth : 0;
     const modulated = velocityModulatedFrequency(scaled, angular, mean, depth);
     const voiced =
-      settings.mode === 'musical' ? placeInVoiceOctave(modulated, state.id) : modulated;
+      settings.mode === 'musical' && !moon ? placeInVoiceOctave(modulated, state.id) : modulated;
     const quantized =
       settings.mode === 'musical' && settings.quantize
         ? quantizeFrequency(voiced, settings.scale, settings.rootPitchClass)
@@ -80,13 +87,22 @@ export function readPitches(
     ];
   });
 
-  const spread =
-    settings.mode === 'musical'
-      ? separateOctaves(
-          prepared.map((item) => item.candidate),
-          settings.harmony,
-        )
-      : prepared.map((item) => item.candidate);
+  const spread = prepared.map((item) => item.candidate);
+  if (settings.mode === 'musical') {
+    const planetSlots = prepared
+      .map((item, index) => ({ index, moon: isMoonId(item.state.id) }))
+      .filter((slot) => !slot.moon);
+    const separated = separateOctaves(
+      planetSlots.map((slot) => spread[slot.index] ?? 0),
+      settings.harmony,
+    );
+    planetSlots.forEach((slot, order) => {
+      const next = separated[order];
+      if (next !== undefined) {
+        spread[slot.index] = next;
+      }
+    });
+  }
 
   return prepared.map((item, index) => {
     const audible = spread[index] ?? item.candidate;
@@ -123,8 +139,9 @@ function formulaFor(
   planetId: string,
 ): string {
   const measured = `f_orbit ${formatHz(orbitalHz)}`;
-  const mapped =
-    octaves === null
+  const mapped = isMoonId(planetId)
+    ? `${measured} × (${settings.registerLowHz} / f_Ganymede)`
+    : octaves === null
       ? `${measured} × ${settings.uniformK.toExponential(4)}`
       : `${measured} × 2^${octaves}`;
   const motion = depth === 0 ? mapped : `${mapped} × (1 + ${depth.toFixed(2)} × (ω/ω̄ − 1))`;

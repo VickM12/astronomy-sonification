@@ -149,6 +149,28 @@ describe('orbital event detection', () => {
     expect(aligned.events.events.some((event) => event.type === 'reference-meridian')).toBe(true);
   });
 
+  it('does not pair a jovicentric moon with a heliocentric planet', () => {
+    const tracks = createTracks([
+      stateAt('earth', 0, START, 365),
+      { ...stateAt('io', 0.2, START, 1.769138), frame: 'jovicentric' },
+    ]);
+    const nextTime = addUtcDays(START, 1);
+    const detected = detectOrbitalEvents(
+      tracks,
+      [
+        stateAt('earth', 0.01, nextTime, 365),
+        { ...stateAt('io', Math.PI, nextTime, 1.769138), frame: 'jovicentric' },
+      ],
+      START,
+      nextTime,
+    );
+    const alignments = detected.events.filter(
+      (event) => event.type === 'conjunction' || event.type === 'opposition',
+    );
+    expect(alignments).toEqual([]);
+    expect(detected.tracks.find((track) => track.planetId === 'io')?.frame).toBe('jovicentric');
+  });
+
   it('keeps a large jump finite when the event list is capped', () => {
     const detected = step(initial(['mercury'], [0.2]), START, 10 * PERIOD + 1, 3);
     expect(detected.events.events).toHaveLength(3);

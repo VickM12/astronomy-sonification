@@ -6,6 +6,8 @@ export interface StudioPreferences {
   hiddenPlanetIds: string[];
   showOrbits: boolean;
   showTrails: boolean;
+  /** Absent on older saves. The studio treats that as moons on. */
+  moonsEnabled?: boolean;
   /** Absent on saves from before sound existed. The sound service validates it. */
   sound?: unknown;
 }

@@ -31,6 +31,8 @@ Angular 22.2 is the current stable line, but it requires Node `^22.22.3`, `^24.1
 
 Orbital periods are the sidereal periods published on the NASA NSSDCA individual planet fact sheets. They are constants, not circular-orbit fits. The summary fact sheet's single "Orbital Period" column is the tropical period and is not used.
 
+`JupiterMoons` supplies Io, Europa, Ganymede, and Callisto as jovicentric EQJ state vectors. The same rotation puts them in the ecliptic. Their periods are the NSSDCA Jovian Satellite Fact Sheet orbital periods. The view draws them as offsets from Jupiter, magnified so they clear Jupiter's disc. That magnification is labeled and is not a distance.
+
 States are cached by planet and millisecond timestamp. The cache is private to this service.
 
 `sampleTrajectory` asks the same service for positions spread across one sidereal period. The view draws those points. It does not fit an ellipse and it does not draw a circle in their place.

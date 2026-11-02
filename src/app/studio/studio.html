@@ -3,10 +3,18 @@
     <h2>Planets</h2>
     <p class="lede">
       Visibility changes the picture. Mute, solo, and gain change the sound. Distances and speeds
-      are the calculated state vectors.
+      are the calculated state vectors. Moon distances are from Jupiter.
     </p>
+    <label class="moon-switch">
+      <input
+        type="checkbox"
+        [checked]="simulation.moonsEnabled()"
+        (change)="setMoons($event)"
+      />
+      Jupiter's moons
+    </label>
     <ul class="planet-list">
-      @for (planet of planets; track planet.id) {
+      @for (planet of bodies(); track planet.id) {
         <li [class.pulsed]="isPulsed(planet.id)" [class.dimmed]="isHidden(planet.id)">
           <label>
             <input
@@ -20,15 +28,15 @@
           @if (stateFor(planet.id); as state) {
             <dl>
               <div>
-                <dt>Distance</dt>
-                <dd>{{ formatAu(state.distanceAU) }} AU</dd>
+                <dt>{{ distanceCaption(planet.id) }}</dt>
+                <dd>{{ formatAu(state.distanceAU, planet.id) }} AU</dd>
               </div>
               <div>
                 <dt>Speed</dt>
                 <dd>{{ formatSpeed(state.speedAUPerDay) }} AU/day</dd>
               </div>
               <div>
-                <dt>Longitude</dt>
+                <dt>{{ longitudeCaption(planet.id) }}</dt>
                 <dd>{{ formatLongitude(state.heliocentricLongitudeRad) }}°</dd>
               </div>
             </dl>
@@ -85,13 +93,15 @@
   <section class="stage" aria-label="Solar system view">
     <app-solar-system-view
       [trajectories]="trajectories()"
+      [moonTrajectories]="moonTrajectories()"
       [visiblePlanetIds]="visiblePlanetIds()"
       [showOrbits]="showOrbits()"
       [showTrails]="showTrails()"
     />
     <p class="scale-note">
       Orbit lines are sampled trajectories over one sidereal period from the selected epoch.
-      Distances are square-root compressed. Planet sizes are exaggerated. Neither scale is a
+      Distances are square-root compressed. Planet sizes are exaggerated. Galilean moons are
+      magnified around Jupiter so they clear Jupiter's disc. None of those scales is a
       measurement.
     </p>
   </section>
@@ -99,14 +109,17 @@
   <aside class="panel observation-panel">
     <h2>Observation</h2>
     <p class="lede">
-      Positions are heliocentric J2000 mean ecliptic coordinates from astronomy-engine. The clock
-      below is UTC. The library converts that instant to Terrestrial Time before evaluating the
-      ephemeris.
+      Planet positions are heliocentric J2000 mean ecliptic coordinates from astronomy-engine.
+      Moon distances in the planet list are measured from Jupiter. The clock below is UTC. The
+      library converts that instant to Terrestrial Time before evaluating the ephemeris.
     </p>
     <p class="readout">
       <span>Simulation time</span>
       <strong>{{ clockText() }}</strong>
     </p>
+    @if (alignmentText(); as alignment) {
+      <p class="readout">{{ alignment }}</p>
+    }
     <div class="toggles">
       <button type="button" (click)="toggleOrbits()">
         {{ showOrbits() ? 'Hide orbit samples' : 'Show orbit samples' }}
@@ -119,8 +132,9 @@
     <h3>Sound</h3>
     <p class="lede">
       Press Play. Musical mode keeps each planet’s scale degree and puts Neptune low and Mercury
-      high, so a new scale retunes the chord. Tempo is how long a crossing rings. Simulation speed
-      only moves the date.
+      high, so a new scale retunes the chord. Jupiter’s moons share one pitch factor, so Io,
+      Europa, and Ganymede keep their period ratios. Tempo is how long a crossing rings.
+      Simulation speed only moves the date.
     </p>
     @if (audio.error(); as audioError) {
       <p class="caution" role="alert">{{ audioError }}</p>
@@ -363,6 +377,7 @@
       />
     </label>
     <button type="button" (click)="jumpToToday()">Today</button>
+    <button type="button" (click)="jumpToAlignment()">Next alignment</button>
     <label class="speed-field">
       <span>Speed (days / real second)</span>
       <input

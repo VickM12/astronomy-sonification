@@ -1,4 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
+import { MOON_IDS, MoonId, isMoonId } from '../domain/moons';
 import { PLANET_IDS, PlanetId, isPlanetId } from '../domain/planets';
 import { uniformScaleFactor } from '../sonification/frequency';
 import {
@@ -36,7 +37,7 @@ export interface SoundSnapshot {
   beats: number;
   compressionSecondsPerDay: number;
   harmony: number;
-  planets: Record<PlanetId, PlanetMix>;
+  planets: Record<PlanetId | MoonId, PlanetMix>;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -59,7 +60,7 @@ export class SoundSettingsService {
   readonly beats = signal(1);
   readonly compressionSecondsPerDay = signal(0.05);
   readonly harmony = signal(0.35);
-  readonly planets = signal<Record<PlanetId, PlanetMix>>(defaultMixes());
+  readonly planets = signal<Record<PlanetId | MoonId, PlanetMix>>(defaultMixes());
 
   readonly snapshot = computed<SoundSnapshot>(() => ({
     mode: this.mode(),
@@ -101,15 +102,17 @@ export class SoundSettingsService {
   });
 
   readonly mappingSummary = computed(() => {
+    const moons =
+      'Jupiter’s moons share one factor, with Ganymede at the low edge of the register, so their period ratios stay intact.';
     if (this.mapping() === 'uniform') {
-      return 'One factor K places Earth at 110 Hz and keeps every orbital ratio. Outer planets can sit below hearing.';
+      return `One factor K places Earth at 110 Hz and keeps every orbital ratio. Outer planets can sit below hearing. ${moons}`;
     }
     const bounds = registerBounds(this.register());
-    return `Each planet is moved by whole octaves into ${bounds.low}–${bounds.high} Hz. That changes the ratios between planets.`;
+    return `Each planet is moved by whole octaves into ${bounds.low}–${bounds.high} Hz. That changes the ratios between planets. ${moons}`;
   });
 
   mixFor(id: string): PlanetMix {
-    if (!isPlanetId(id)) {
+    if (!isAudibleId(id)) {
       return { gain: 0, muted: true, solo: false, instrument: 'sine' };
     }
     return this.planets()[id];
@@ -249,7 +252,7 @@ export class SoundSettingsService {
     if (typeof record['planets'] === 'object' && record['planets'] !== null) {
       const stored = record['planets'] as Record<string, unknown>;
       const next = defaultMixes();
-      for (const id of PLANET_IDS) {
+      for (const id of [...PLANET_IDS, ...MOON_IDS]) {
         next[id] = mixFrom(stored[id], next[id]);
       }
       this.planets.set(next);
@@ -257,7 +260,7 @@ export class SoundSettingsService {
   }
 
   private patchMix(id: string, patch: Partial<PlanetMix>): void {
-    if (!isPlanetId(id)) {
+    if (!isAudibleId(id)) {
       return;
     }
     this.planets.update((current) => ({
@@ -282,12 +285,16 @@ export class SoundSettingsService {
   }
 }
 
-export function defaultMixes(): Record<PlanetId, PlanetMix> {
-  const mixes = {} as Record<PlanetId, PlanetMix>;
-  for (const id of PLANET_IDS) {
+export function defaultMixes(): Record<PlanetId | MoonId, PlanetMix> {
+  const mixes = {} as Record<PlanetId | MoonId, PlanetMix>;
+  for (const id of [...PLANET_IDS, ...MOON_IDS]) {
     mixes[id] = { gain: 0.8, muted: false, solo: false, instrument: 'sine' };
   }
   return mixes;
+}
+
+function isAudibleId(id: string): id is PlanetId | MoonId {
+  return isPlanetId(id) || isMoonId(id);
 }
 
 function mixFrom(value: unknown, fallback: PlanetMix): PlanetMix {

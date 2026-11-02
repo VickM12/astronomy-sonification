@@ -1,4 +1,5 @@
 import { OrbitalEvent } from '../domain/orbital-event';
+import { OrbitFrame } from '../domain/moons';
 import { PlanetaryState } from '../domain/planetary-state';
 import { addUtcDays, daysBetween } from '../astronomy/time';
 
@@ -11,6 +12,8 @@ export interface LongitudeTrack {
   /** Longitude captured when the tracks were created, after a seek or reset. */
   anchorRad: number;
   orbitalPeriodDays: number;
+  /** Moons stay in the jovicentric frame so they are not paired with planets. */
+  frame: OrbitFrame;
 }
 
 export interface DetectionResult {
@@ -30,6 +33,7 @@ export function createTracks(states: readonly PlanetaryState[]): LongitudeTrack[
     unwrappedRad: normalizeLongitude(state.heliocentricLongitudeRad),
     anchorRad: normalizeLongitude(state.heliocentricLongitudeRad),
     orbitalPeriodDays: state.orbitalPeriodDays,
+    frame: state.frame ?? 'heliocentric',
   }));
 }
 
@@ -74,6 +78,7 @@ export function detectOrbitalEvents(
       nextUnwrapped: track.unwrappedRad + motion,
       nextPrincipal: principal,
       orbitalPeriodDays: state.orbitalPeriodDays,
+      frame: track.frame,
     });
   }
 
@@ -118,6 +123,9 @@ export function detectOrbitalEvents(
     for (let other = index + 1; other < advanced.length; other += 1) {
       const first = advanced[index];
       const second = advanced[other];
+      if (!first || !second || first.frame !== second.frame) {
+        continue;
+      }
       const start = first.previousUnwrapped - second.previousUnwrapped;
       const end = first.nextUnwrapped - second.nextUnwrapped;
       omittedCount += collectCrossings(
@@ -177,6 +185,7 @@ export function detectOrbitalEvents(
       unwrappedRad: planet.nextUnwrapped,
       anchorRad: planet.anchorRad,
       orbitalPeriodDays: planet.orbitalPeriodDays,
+      frame: planet.frame,
     })),
     omittedCount,
   };
@@ -216,6 +225,7 @@ interface AdvancedPlanet {
   nextUnwrapped: number;
   nextPrincipal: number;
   orbitalPeriodDays: number;
+  frame: OrbitFrame;
 }
 
 interface DraftEvent extends OrbitalEvent {}

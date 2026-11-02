@@ -1,3 +1,4 @@
+import { isMoonId } from '../domain/moons';
 import { AstronomyService } from './astronomy.service';
 import { SIDEREAL_ORBITAL_PERIOD_DAYS } from './orbital-periods';
 import { UnsupportedDateError, addUtcDays, parseUtcInstant } from './time';
@@ -20,6 +21,26 @@ describe('AstronomyService', () => {
     expect(earth.distanceAU).toBeCloseTo(0.9833138697735959, 9);
     expect((earth.heliocentricLongitudeRad * 180) / Math.PI).toBeCloseTo(100.37842755377832, 6);
     expect(earth.timestamp).toBe(J2000);
+  });
+
+  it('places the Galilean moons on jovicentric ecliptic vectors at J2000', () => {
+    const moons = service.getStates(J2000, true).filter((state) => isMoonId(state.id));
+    expect(service.getStates(J2000).map((state) => state.id)).toHaveLength(8);
+    expect(moons.map((state) => state.id)).toEqual(['io', 'europa', 'ganymede', 'callisto']);
+
+    const io = moons[0];
+    expect(io?.frame).toBe('jovicentric');
+    expect(io?.positionAU.x).toBeCloseTo(0.0026697905412702066, 9);
+    expect(io?.positionAU.y).toBeCloseTo(0.000870910310221673, 9);
+    expect(io?.positionAU.z).toBeCloseTo(0.00007127752500905838, 12);
+    expect(io?.distanceAU).toBeCloseTo(0.0028091541054697747, 9);
+
+    for (const moon of moons) {
+      expect(moon.frame).toBe('jovicentric');
+      expect(moon.distanceAU).toBeGreaterThan(0.001);
+      expect(moon.distanceAU).toBeLessThan(0.02);
+      expect(moon.distanceAU).toBeCloseTo(vectorLength(moon.positionAU), 12);
+    }
   });
 
   it('derives distance, speed, and longitude from the state vector', () => {

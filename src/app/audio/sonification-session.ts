@@ -28,6 +28,14 @@ export class SonificationSession {
     if (!this.audio.running()) {
       return;
     }
+    try {
+      this.followRunning();
+    } catch (error) {
+      this.audio.error.set(error instanceof Error ? error.message : 'Audio stopped.');
+    }
+  }
+
+  private followRunning(): void {
     const snapshot = this.sound.snapshot();
     const playing = this.simulation.playing();
     this.audio.setMix(snapshot.masterGain, snapshot.reverb, snapshot.delay);
@@ -64,6 +72,14 @@ export class SonificationSession {
     if (!this.audio.running() || step.events.length === 0) {
       return;
     }
+    try {
+      this.scheduleStep(step);
+    } catch (error) {
+      this.audio.error.set(error instanceof Error ? error.message : 'Audio stopped.');
+    }
+  }
+
+  private scheduleStep(step: SimulationStep): void {
     const snapshot = this.sound.snapshot();
     const plan = buildAudioPlan({
       states: step.states,

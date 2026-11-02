@@ -5,7 +5,9 @@ import { AudioEngineService } from '../audio/audio-engine.service';
 import { SonificationSession } from '../audio/sonification-session';
 import { SoundSettingsService } from '../audio/sound-settings.service';
 import { describeOrbitalEvent } from '../domain/orbital-event';
+import { MOONS, isMoonId } from '../domain/moons';
 import { PLANETS, planetName } from '../domain/planets';
+import { findNextAlignment } from '../simulation/find-alignment';
 import { OrbitalSimulationService } from '../simulation/orbital-simulation.service';
 import { formatHz } from '../sonification/frequency';
 import { heardFrequency } from '../sonification/plan';
@@ -20,7 +22,6 @@ import { loadPreferences, savePreferences } from './preferences';
   templateUrl: './studio.html',
 })
 export class Studio implements OnDestroy {
-  protected readonly planets = PLANETS;
   protected readonly scales = SCALES;
   protected readonly roots = ROOTS;
   protected readonly registers = REGISTERS;
@@ -40,10 +41,22 @@ export class Studio implements OnDestroy {
   protected readonly showTrails = signal(true);
   protected readonly epochText = signal('');
   protected readonly pulsed = signal<ReadonlySet<string>>(new Set());
+  protected readonly alignmentText = signal<string | null>(null);
 
-  protected readonly visiblePlanetIds = computed(() =>
-    PLANETS.filter((planet) => !this.hidden().includes(planet.id)).map((planet) => planet.id),
+  protected readonly bodies = computed(() =>
+    this.simulation.moonsEnabled() ? [...PLANETS, ...MOONS] : [...PLANETS],
   );
+
+  protected readonly visiblePlanetIds = computed(() => {
+    const planets = PLANETS.filter((planet) => !this.hidden().includes(planet.id)).map(
+      (planet) => planet.id,
+    );
+    if (!this.simulation.moonsEnabled()) {
+      return planets;
+    }
+    const moons = MOONS.filter((moon) => !this.hidden().includes(moon.id)).map((moon) => moon.id);
+    return [...planets, ...moons];
+  });
 
   protected readonly trajectories = computed(() => {
     if (!this.showOrbits()) {
@@ -54,6 +67,17 @@ export class Studio implements OnDestroy {
       return [];
     }
     return this.astronomy.sampleTrajectories(epoch, 128);
+  });
+
+  protected readonly moonTrajectories = computed(() => {
+    if (!this.showOrbits() || !this.simulation.moonsEnabled()) {
+      return [];
+    }
+    const epoch = this.simulation.epoch();
+    if (!epoch) {
+      return [];
+    }
+    return this.astronomy.sampleMoonTrajectories(epoch, 48);
   });
 
   protected readonly clockText = computed(() => {
@@ -73,6 +97,7 @@ export class Studio implements OnDestroy {
     this.showOrbits.set(stored?.showOrbits ?? true);
     this.showTrails.set(stored?.showTrails ?? true);
     this.simulation.setSpeed(stored?.speedDaysPerSecond ?? 20);
+    this.simulation.setMoonsEnabled(stored?.moonsEnabled !== false);
     this.sound.apply(stored?.sound);
     void this.session;
 
@@ -117,8 +142,16 @@ export class Studio implements OnDestroy {
     return describeOrbitalEvent(event);
   }
 
-  protected formatAu(value: number): string {
-    return value.toFixed(4);
+  protected formatAu(value: number, id: string): string {
+    return value.toFixed(isMoonId(id) ? 5 : 4);
+  }
+
+  protected distanceCaption(id: string): string {
+    return isMoonId(id) ? 'From Jupiter' : 'Distance';
+  }
+
+  protected longitudeCaption(id: string): string {
+    return isMoonId(id) ? 'Around Jupiter' : 'Longitude';
   }
 
   protected formatSpeed(value: number): string {
@@ -165,7 +198,36 @@ export class Studio implements OnDestroy {
   }
 
   protected reset(): void {
+    this.alignmentText.set(null);
     this.simulation.reset();
+  }
+
+  protected setMoons(event: Event): void {
+    const checked = checkedFrom(event);
+    if (checked === null) {
+      return;
+    }
+    this.alignmentText.set(null);
+    this.simulation.setMoonsEnabled(checked);
+    this.remember();
+  }
+
+  protected jumpToAlignment(): void {
+    const time = this.simulation.simulationTime();
+    if (!time) {
+      return;
+    }
+    const event = findNextAlignment(this.astronomy, time);
+    if (!event) {
+      this.alignmentText.set('No planetary conjunction or opposition in the next 800 days.');
+      return;
+    }
+    if (!this.simulation.seek(event.simulationTime)) {
+      return;
+    }
+    this.epochText.set(event.simulationTime.toISOString().replace('.000Z', 'Z'));
+    this.alignmentText.set(describeOrbitalEvent(event));
+    this.remember();
   }
 
   protected jumpToToday(): void {
@@ -208,6 +270,7 @@ export class Studio implements OnDestroy {
   }
 
   protected async step(days: number): Promise<void> {
+    this.alignmentText.set(null);
     await this.audio.start();
     this.simulation.advanceDays(days);
   }
@@ -374,6 +437,7 @@ export class Studio implements OnDestroy {
   }
 
   private applyEpoch(value: string, persist: boolean): void {
+    this.alignmentText.set(null);
     const date = parseUtcInstant(value.trim());
     const accepted = this.simulation.setEpoch(date);
     if (!accepted) {
@@ -396,6 +460,7 @@ export class Studio implements OnDestroy {
       hiddenPlanetIds: this.hidden(),
       showOrbits: this.showOrbits(),
       showTrails: this.showTrails(),
+      moonsEnabled: this.simulation.moonsEnabled(),
       sound: this.sound.snapshot(),
     });
   }

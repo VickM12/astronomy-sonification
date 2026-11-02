@@ -1,4 +1,4 @@
-import { compressDistance, toScenePosition, toVisualPosition } from './visual-scale';
+import { compressDistance, moonSceneOffset, toScenePosition, toVisualPosition } from './visual-scale';
 
 describe('visual scale', () => {
   it('compresses distance monotonically and keeps the direction', () => {
@@ -12,5 +12,13 @@ describe('visual scale', () => {
     const scene = toScenePosition({ x: 1, y: 0, z: 2 });
     expect(scene.y).toBeCloseTo(toVisualPosition({ x: 1, y: 0, z: 2 }).z, 12);
     expect(scene.z).toBeCloseTo(toVisualPosition({ x: 1, y: 0, z: 2 }).y, 12);
+  });
+
+  it('offsets a moon from Jupiter without square-root compression', () => {
+    const offset = moonSceneOffset({ x: 0.00282, y: 0, z: 0 });
+    expect(offset.x).toBeCloseTo(0.00282 * 280, 8);
+    expect(offset.y).toBe(0);
+    expect(offset.z).toBe(0);
+    expect(Math.hypot(offset.x, offset.y, offset.z)).toBeGreaterThan(0.72);
   });
 });

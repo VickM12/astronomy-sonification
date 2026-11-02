@@ -28,6 +28,8 @@ npm run build
 - Play, pause, step, and change the simulation speed in days per real-time second. Tempo and audio-seconds-per-day are separate controls.
 - Jump to today, type another UTC instant, or reset to the date you last entered. A seek does not replay the crossings it skipped.
 - Hide planets, orbit samples, and trails. Mute, solo, and gain change what you hear.
+- Turn on Jupiter's moons. Io, Europa, Ganymede, and Callisto are placed from Jupiter and pitched so their period ratios stay intact.
+- Jump to the next planetary conjunction or opposition.
 - Drag the view to orbit the Sun, and scroll to zoom. Distances are square-root compressed and planet sizes are exaggerated. The view says so.
 
 Settings are stored in the browser under `harmonia-mundi.preferences.v1`. Older saves without a sound block still load.

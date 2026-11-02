@@ -7,6 +7,9 @@ import { DroneInstruction, PulseInstruction } from '../sonification/plan';
 /** Tests provide an in-memory backend. The browser graph is the default. */
 export const AUDIO_BACKEND = new InjectionToken<AudioBackend>('AUDIO_BACKEND');
 
+/** Notes sounding at once. More than this exhausts the audio thread and can freeze the tab. */
+const MAX_LIVE_PULSES = 16;
+
 /**
  * Starts on a user gesture and keeps the Tone graph behind a small interface.
  * Precise notes are handed to the backend with an audio-clock time.
@@ -18,6 +21,7 @@ export class AudioEngineService {
 
   private readonly backend: AudioBackend;
   private disposed = false;
+  private pulseEnds: number[] = [];
 
   constructor(@Optional() @Inject(AUDIO_BACKEND) backend?: AudioBackend | null) {
     this.backend = backend ?? new ToneAudioBackend();
@@ -51,14 +55,14 @@ export class AudioEngineService {
     if (!this.backend.running || this.disposed) {
       return;
     }
-    this.backend.setMix(masterGain, reverb, delay);
+    this.guard(() => this.backend.setMix(masterGain, reverb, delay));
   }
 
   syncDrones(drones: readonly DroneInstruction[]): void {
     if (!this.backend.running || this.disposed) {
       return;
     }
-    this.backend.syncDrones(drones);
+    this.guard(() => this.backend.syncDrones(drones));
   }
 
   silenceDrones(): void {
@@ -72,17 +76,28 @@ export class AudioEngineService {
     if (!this.backend.running || this.disposed) {
       return;
     }
-    for (const pulse of pulses) {
-      this.backend.schedulePulse(pulse);
-    }
+    this.guard(() => {
+      const now = this.backend.currentTime();
+      this.pulseEnds = this.pulseEnds.filter((end) => end > now);
+      for (const pulse of pulses) {
+        if (this.pulseEnds.length >= MAX_LIVE_PULSES) {
+          break;
+        }
+        this.backend.schedulePulse(pulse);
+        this.pulseEnds.push(pulse.when + pulse.durationSeconds + 0.45);
+      }
+    });
   }
 
   stop(): void {
     if (!this.backend.running || this.disposed) {
       return;
     }
-    this.backend.silenceDrones();
-    this.backend.cutPulses();
+    this.pulseEnds = [];
+    this.guard(() => {
+      this.backend.silenceDrones();
+      this.backend.cutPulses();
+    });
   }
 
   dispose(): void {
@@ -92,5 +107,13 @@ export class AudioEngineService {
     this.disposed = true;
     this.backend.dispose();
     this.running.set(false);
+  }
+
+  private guard(action: () => void): void {
+    try {
+      action();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'Audio stopped.');
+    }
   }
 }

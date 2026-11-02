@@ -2,10 +2,12 @@
   <p class="eyebrow">Harmonia Mundi</p>
   <h2>An instrument made from orbits</h2>
   <p>
-    This observatory shows the eight planets from Mercury through Neptune. Their places come from
-    Astronomy Engine’s VSOP87 state vectors, rotated from the J2000 mean equator into the J2000
-    mean ecliptic. Distance and speed are the lengths of those vectors. Nothing in the view is a
-    circular stand-in for a calculated position.
+    This observatory shows the eight planets from Mercury through Neptune, and Jupiter’s moons Io,
+    Europa, Ganymede, and Callisto. Planetary places come from Astronomy Engine’s VSOP87 state
+    vectors. The moons come from JupiterMoons, measured from Jupiter’s
+    center. Both are rotated from the J2000 mean equator into the J2000 mean ecliptic. Distance
+    and speed are the lengths of those vectors. Nothing in the view is a circular stand-in for a
+    calculated position. Moon distances on screen are magnified so the moons clear Jupiter’s disc.
   </p>
   <p>
     The time you set is UTC. Astronomy Engine then converts that instant to Terrestrial Time for
@@ -20,9 +22,11 @@
   </p>
   <p>
     Press Play to hear the orbits. Scientific mode maps each sidereal frequency into sound, either
-    by one shared scale factor or by folding each planet into a chosen octave. Musical mode starts
-    from that same mapping and can snap the pitches to a scale. The formulas and the resulting
-    hertz stay in the observation panel. Export to WAV or MIDI is still ahead.
+    by one shared scale factor or by folding each planet into a chosen octave. The four moons
+    share one other factor, so Ganymede sits at the low edge of the register and their period
+    ratios stay intact. Musical mode starts from those mappings and can snap the pitches to a
+    scale. Next alignment jumps to the next planet–planet conjunction or opposition. The formulas
+    and the resulting hertz stay in the observation panel. Export to WAV or MIDI is still ahead.
   </p>
   <p><a routerLink="/">Return to the observatory</a></p>
 </article>

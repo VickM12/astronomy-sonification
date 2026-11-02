@@ -12,6 +12,7 @@ interface Voice {
   gain: Gain;
   fresh: boolean;
   lastHz: number;
+  lastGain: number;
 }
 
 interface LivePulse {
@@ -36,6 +37,7 @@ export class ToneAudioBackend implements AudioBackend {
   private delaySend: Gain | null = null;
   private readonly voices = new Map<string, Voice>();
   private pulses: LivePulse[] = [];
+  private mix = { master: Number.NaN, reverb: Number.NaN, delay: Number.NaN };
 
   async start(): Promise<void> {
     if (this.running || this.disposed) {
@@ -70,9 +72,22 @@ export class ToneAudioBackend implements AudioBackend {
     if (!this.bus || !this.reverbSend || !this.delaySend) {
       return;
     }
-    this.bus.gain.rampTo(clampUnit(masterGain), 0.05);
-    this.reverbSend.gain.rampTo(clampUnit(reverb), 0.05);
-    this.delaySend.gain.rampTo(clampUnit(delay), 0.05);
+    const next = {
+      master: clampUnit(masterGain),
+      reverb: clampUnit(reverb),
+      delay: clampUnit(delay),
+    };
+    if (
+      next.master === this.mix.master &&
+      next.reverb === this.mix.reverb &&
+      next.delay === this.mix.delay
+    ) {
+      return;
+    }
+    this.mix = next;
+    this.bus.gain.rampTo(next.master, 0.05);
+    this.reverbSend.gain.rampTo(next.reverb, 0.05);
+    this.delaySend.gain.rampTo(next.delay, 0.05);
   }
 
   syncDrones(drones: readonly DroneInstruction[]): void {
@@ -99,7 +114,7 @@ export class ToneAudioBackend implements AudioBackend {
   }
 
   schedulePulse(pulse: PulseInstruction): void {
-    if (!this.tone || !this.bus || !this.running) {
+    if (!this.tone || !this.bus || !this.running || this.pulses.length >= 16) {
       return;
     }
     const tone = this.tone;
@@ -162,7 +177,14 @@ export class ToneAudioBackend implements AudioBackend {
       oscillator.connect(gain);
       gain.connect(this.bus);
       oscillator.start(this.tone.now());
-      voice = { instrument: drone.instrument, oscillator, gain, fresh: true, lastHz: 0 };
+      voice = {
+        instrument: drone.instrument,
+        oscillator,
+        gain,
+        fresh: true,
+        lastHz: 0,
+        lastGain: Number.NaN,
+      };
       this.voices.set(drone.planetId, voice);
     }
     if (voice.instrument !== drone.instrument) {
@@ -181,7 +203,11 @@ export class ToneAudioBackend implements AudioBackend {
       voice.oscillator.frequency.rampTo(frequency, 0.12);
     }
     voice.lastHz = frequency;
-    voice.gain.gain.rampTo(Math.max(0, drone.gain), 0.05);
+    const level = Math.max(0, drone.gain);
+    if (level !== voice.lastGain) {
+      voice.lastGain = level;
+      voice.gain.gain.rampTo(level, 0.05);
+    }
   }
 
   private sweepPulses(): void {

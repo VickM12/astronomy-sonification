@@ -1,3 +1,5 @@
+import { moonProfile } from './moons';
+
 export const PLANET_IDS = [
   'mercury',
   'venus',
@@ -42,5 +44,5 @@ export function planetProfile(id: string): PlanetProfile | undefined {
 }
 
 export function planetName(id: string): string {
-  return planetProfile(id)?.name ?? id;
+  return planetProfile(id)?.name ?? moonProfile(id)?.name ?? id;
 }

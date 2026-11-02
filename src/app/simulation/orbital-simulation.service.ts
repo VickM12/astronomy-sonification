@@ -43,6 +43,8 @@ export class OrbitalSimulationService {
   readonly omittedEventCount = signal(0);
   readonly error = signal<string | null>(null);
   readonly trailGeneration = signal(0);
+  /** Off unless the studio turns it on, so planet-only tests stay planet-only. */
+  readonly moonsEnabled = signal(false);
 
   private tracks: LongitudeTrack[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -70,6 +72,17 @@ export class OrbitalSimulationService {
     this.speedDaysPerSecond.set(clamped);
   }
 
+  setMoonsEnabled(enabled: boolean): void {
+    if (this.moonsEnabled() === enabled) {
+      return;
+    }
+    this.moonsEnabled.set(enabled);
+    const time = this.simulationTime();
+    if (time) {
+      this.seek(time);
+    }
+  }
+
   /** Seek and remember this instant as the time Reset returns to. */
   setEpoch(date: Date): boolean {
     const accepted = this.seek(date);
@@ -94,7 +107,7 @@ export class OrbitalSimulationService {
   seek(date: Date): boolean {
     const previousTime = this.simulationTime();
     try {
-      const states = this.astronomy.getStates(date);
+      const states = this.statesAt(date);
       this.simulationTime.set(date);
       this.states.set(states);
       this.tracks = createTracks(states);
@@ -126,7 +139,7 @@ export class OrbitalSimulationService {
 
     try {
       const nextTime = addUtcDays(current, days);
-      const states = this.astronomy.getStates(nextTime);
+      const states = this.statesAt(nextTime);
       const detected = detectOrbitalEvents(this.tracks, states, current, nextTime);
       this.commitStep(nextTime, states, detected, days, realSeconds);
       return detected.events;
@@ -209,6 +222,10 @@ export class OrbitalSimulationService {
       realSeconds,
       simulatedDays,
     });
+  }
+
+  private statesAt(time: Date): PlanetaryState[] {
+    return this.astronomy.getStates(time, this.moonsEnabled());
   }
 
   private emit(step: SimulationStep): void {
