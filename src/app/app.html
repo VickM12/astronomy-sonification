@@ -1,0 +1,15 @@
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand">
+      <p class="eyebrow">Astronomical sonification</p>
+      <h1><a routerLink="/">Harmonia Mundi</a></h1>
+    </div>
+    <nav>
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+        Observatory
+      </a>
+      <a routerLink="/about" routerLinkActive="active">Notes</a>
+    </nav>
+  </header>
+  <router-outlet />
+</div>

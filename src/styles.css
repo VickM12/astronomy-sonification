@@ -1,0 +1,387 @@
+:root {
+  color-scheme: dark;
+  --bg: #07090e;
+  --bg-raised: #121821;
+  --line: #2c3a4d;
+  --text: #e7eef8;
+  --muted: #93a4b8;
+  --gold: #e0c17a;
+  --gold-dim: #8c7340;
+  --danger: #ffb4a8;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  font-family: "Segoe UI", "Avenir Next", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  background-image: radial-gradient(circle at 50% -10%, #1a2740 0%, transparent 42%);
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: #1b2636;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--gold-dim);
+  color: var(--gold);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+input {
+  background: #0c1118;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.55rem;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+  padding: 0.85rem 1.25rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand h1 {
+  margin: 0;
+  font-family: Palatino, "Palatino Linotype", "Iowan Old Style", Georgia, serif;
+  font-size: 1.7rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.brand h1 a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--gold);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+nav {
+  display: flex;
+  gap: 0.4rem;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+}
+
+nav a.active {
+  color: var(--text);
+  border-color: var(--line);
+  background: #121821;
+}
+
+.studio {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(250px, 330px);
+  grid-template-rows: minmax(520px, 1fr) auto;
+  min-height: calc(100vh - 4.6rem);
+}
+
+.panel {
+  background: rgba(18, 24, 33, 0.92);
+  border-color: var(--line);
+  border-style: solid;
+  padding: 1rem 1rem 1.4rem;
+  overflow: auto;
+}
+
+.planet-panel {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  border-width: 0 1px 0 0;
+}
+
+.observation-panel {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  border-width: 0 0 0 1px;
+}
+
+.stage {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 520px;
+  background:
+    radial-gradient(circle at 50% 55%, rgba(48, 72, 112, 0.28), transparent 36%),
+    #080b12;
+}
+
+app-solar-system-view,
+.solar-view,
+.stage-frame,
+.stage-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.solar-view,
+.stage-frame {
+  position: absolute;
+  inset: 0;
+}
+
+.stage-frame canvas {
+  touch-action: none;
+}
+
+.scale-note,
+.webgl-fallback {
+  position: absolute;
+  z-index: 2;
+  max-width: 36rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.scale-note {
+  left: 0.8rem;
+  bottom: 0.8rem;
+  pointer-events: none;
+}
+
+.webgl-fallback {
+  left: 1rem;
+  top: 1rem;
+  color: var(--danger);
+}
+
+.transport {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.8rem;
+  align-items: end;
+  padding: 0.75rem;
+  border-top: 1px solid var(--line);
+  background: #0d121a;
+}
+
+.transport-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.date-field,
+.speed-field {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.date-field input {
+  min-width: 16rem;
+}
+
+.speed-field input {
+  width: 6.5rem;
+}
+
+h2,
+h3 {
+  margin: 0 0 0.4rem;
+  font-family: Palatino, "Palatino Linotype", Georgia, serif;
+  font-weight: 500;
+}
+
+.lede,
+.readout,
+.event-log {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.readout {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0.8rem 0;
+}
+
+.readout strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.planet-list {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.planet-list li {
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  padding: 0.35rem 0.4rem 0.45rem;
+}
+
+.planet-list li.pulsed {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 1px rgba(224, 193, 122, 0.35);
+}
+
+.planet-list li.dimmed {
+  opacity: 0.55;
+}
+
+.planet-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 600;
+}
+
+.swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.planet-list dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin: 0.35rem 0 0;
+}
+
+.planet-list dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.planet-list dd {
+  margin: 0.1rem 0 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+}
+
+.event-log {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.event-log .empty {
+  list-style: none;
+  margin-left: -1.1rem;
+}
+
+.caution {
+  color: var(--danger);
+  font-size: 0.86rem;
+}
+
+.about {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+}
+
+.about h2 {
+  font-size: 2rem;
+  margin-bottom: 0.8rem;
+}
+
+.about p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 980px) {
+  .topbar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .studio {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(420px, 72vh) auto auto;
+  }
+
+  .planet-panel,
+  .stage,
+  .observation-panel,
+  .transport {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .planet-panel,
+  .observation-panel {
+    border-width: 0 0 1px;
+    max-height: none;
+  }
+
+  .stage {
+    min-height: 420px;
+    order: -1;
+  }
+}

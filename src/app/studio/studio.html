@@ -1,0 +1,139 @@
+<div class="studio">
+  <aside class="panel planet-panel">
+    <h2>Planets</h2>
+    <p class="lede">Visibility only. Distances and speeds are the calculated state vectors.</p>
+    <ul class="planet-list">
+      @for (planet of planets; track planet.id) {
+        <li [class.pulsed]="isPulsed(planet.id)" [class.dimmed]="isHidden(planet.id)">
+          <label>
+            <input
+              type="checkbox"
+              [checked]="!isHidden(planet.id)"
+              (change)="togglePlanet(planet.id)"
+            />
+            <span class="swatch" [style.background]="planet.swatch"></span>
+            <span class="planet-name">{{ planet.name }}</span>
+          </label>
+          @if (stateFor(planet.id); as state) {
+            <dl>
+              <div>
+                <dt>Distance</dt>
+                <dd>{{ formatAu(state.distanceAU) }} AU</dd>
+              </div>
+              <div>
+                <dt>Speed</dt>
+                <dd>{{ formatSpeed(state.speedAUPerDay) }} AU/day</dd>
+              </div>
+              <div>
+                <dt>Longitude</dt>
+                <dd>{{ formatLongitude(state.heliocentricLongitudeRad) }}°</dd>
+              </div>
+            </dl>
+          }
+        </li>
+      }
+    </ul>
+  </aside>
+
+  <section class="stage" aria-label="Solar system view">
+    <app-solar-system-view
+      [trajectories]="trajectories()"
+      [visiblePlanetIds]="visiblePlanetIds()"
+      [showOrbits]="showOrbits()"
+      [showTrails]="showTrails()"
+    />
+    <p class="scale-note">
+      Orbit lines are sampled trajectories over one sidereal period from the selected epoch.
+      Distances are square-root compressed. Planet sizes are exaggerated. Neither scale is a
+      measurement.
+    </p>
+  </section>
+
+  <aside class="panel observation-panel">
+    <h2>Observation</h2>
+    <p class="lede">
+      Positions are heliocentric J2000 mean ecliptic coordinates from astronomy-engine. The clock
+      below is UTC. The library converts that instant to Terrestrial Time before evaluating the
+      ephemeris.
+    </p>
+    <p class="readout">
+      <span>Simulation time</span>
+      <strong>{{ clockText() }}</strong>
+    </p>
+    <div class="toggles">
+      <button type="button" (click)="toggleOrbits()">
+        {{ showOrbits() ? 'Hide orbit samples' : 'Show orbit samples' }}
+      </button>
+      <button type="button" (click)="toggleTrails()">
+        {{ showTrails() ? 'Hide trails' : 'Show trails' }}
+      </button>
+    </div>
+    <h3>Crossings</h3>
+    <p class="lede">
+      Reference crossings use ecliptic longitude 0°. A revolution returns a planet to the longitude
+      it had at the last seek or reset. Alignments compare those longitudes. Sound is not generated
+      in this version.
+    </p>
+    @if (simulation.omittedEventCount() > 0) {
+      <p class="caution" role="status">
+        The last step contained more crossings than were listed.
+      </p>
+    }
+    @if (simulation.error(); as message) {
+      <p class="caution" role="alert">{{ message }}</p>
+    }
+    <ol class="event-log">
+      @for (event of simulation.eventLog(); track $index) {
+        <li>{{ describe(event) }}</li>
+      } @empty {
+        <li class="empty">No crossings since the last seek.</li>
+      }
+    </ol>
+  </aside>
+
+  <footer class="transport">
+    <div class="transport-group">
+      <button type="button" (click)="play()" [disabled]="simulation.playing()" aria-label="Play">
+        Play
+      </button>
+      <button type="button" (click)="pause()" [disabled]="!simulation.playing()" aria-label="Pause">
+        Pause
+      </button>
+      <button type="button" (click)="reset()">Reset</button>
+    </div>
+    <div class="transport-group steps">
+      <button type="button" (click)="step(-30)">−30 d</button>
+      <button type="button" (click)="step(-1)">−1 d</button>
+      <button type="button" (click)="step(1)">+1 d</button>
+      <button type="button" (click)="step(30)">+30 d</button>
+    </div>
+    <label class="date-field">
+      <span>Go to UTC</span>
+      <input
+        [value]="epochText()"
+        spellcheck="false"
+        (change)="commitEpoch($event)"
+        aria-label="UTC date and time"
+      />
+    </label>
+    <button type="button" (click)="jumpToToday()">Today</button>
+    <label class="speed-field">
+      <span>Speed (days / real second)</span>
+      <input
+        type="number"
+        min="-5000"
+        max="5000"
+        step="1"
+        [value]="simulation.speedDaysPerSecond()"
+        (change)="commitSpeed($event)"
+      />
+    </label>
+    <div class="transport-group presets">
+      <button type="button" (click)="chooseSpeed(-20)">Rewind</button>
+      <button type="button" (click)="chooseSpeed(1)">1</button>
+      <button type="button" (click)="chooseSpeed(20)">20</button>
+      <button type="button" (click)="chooseSpeed(100)">100</button>
+      <button type="button" (click)="chooseSpeed(365)">365</button>
+    </div>
+  </footer>
+</div>

@@ -1,0 +1,9 @@
+<div class="stage-frame" #frame>
+  <canvas
+    #canvas
+    aria-label="Heliocentric orrery. Distances are compressed and planet sizes are exaggerated."
+  ></canvas>
+  @if (webglError()) {
+    <p class="webgl-fallback" role="status">{{ webglError() }}</p>
+  }
+</div>
