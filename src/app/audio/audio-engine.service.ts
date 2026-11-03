@@ -3,12 +3,15 @@ import { InjectionToken } from '@angular/core';
 import { AudioBackend } from './audio-backend';
 import { ToneAudioBackend } from './tone-audio-backend';
 import { DroneInstruction, PulseInstruction } from '../sonification/plan';
+import { InstrumentId } from '../sonification/sound-model';
+import { encodeWav } from '../export/wav';
 
 /** Tests provide an in-memory backend. The browser graph is the default. */
 export const AUDIO_BACKEND = new InjectionToken<AudioBackend>('AUDIO_BACKEND');
 
 /** Notes sounding at once. More than this exhausts the audio thread and can freeze the tab. */
 const MAX_LIVE_PULSES = 16;
+export const MAX_RECORDING_SECONDS = 300;
 
 /**
  * Starts on a user gesture and keeps the Tone graph behind a small interface.
@@ -20,10 +23,14 @@ export class AudioEngineService {
   readonly running = signal(false);
   /** Instrument ids whose recordings are downloading; a synth patch plays meanwhile. */
   readonly loading = signal<readonly string[]>([]);
+  readonly preparing = signal(false);
+  readonly recording = signal(false);
+  readonly recordingLimitReached = signal(false);
 
   private readonly backend: AudioBackend;
   private disposed = false;
   private pulseEnds: number[] = [];
+  private recordingTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(@Optional() @Inject(AUDIO_BACKEND) backend?: AudioBackend | null) {
     this.backend = backend ?? new ToneAudioBackend();
@@ -60,6 +67,42 @@ export class AudioEngineService {
     this.guard(() => this.backend.setMix(masterGain, reverb, delay));
   }
 
+  async prepareInstruments(instruments: readonly InstrumentId[]): Promise<void> {
+    if (!this.backend.prepareInstruments || this.disposed) {
+      return;
+    }
+    this.preparing.set(true);
+    try {
+      await this.backend.prepareInstruments(instruments);
+    } finally {
+      this.preparing.set(false);
+    }
+  }
+
+  startRecording(): void {
+    if (!this.backend.startRecording || !this.running() || this.disposed) {
+      throw new Error('Audio recording is unavailable.');
+    }
+    this.backend.startRecording();
+    this.recordingLimitReached.set(false);
+    this.recording.set(true);
+    this.recordingTimer = setTimeout(() => {
+      this.recordingLimitReached.set(true);
+    }, MAX_RECORDING_SECONDS * 1000);
+  }
+
+  async stopRecording(): Promise<Blob> {
+    if (!this.backend.stopRecording || !this.recording()) {
+      throw new Error('No audio recording is in progress.');
+    }
+    this.clearRecordingTimer();
+    try {
+      return encodeWav(await this.backend.stopRecording());
+    } finally {
+      this.recording.set(false);
+    }
+  }
+
   syncDrones(drones: readonly DroneInstruction[]): void {
     if (!this.backend.running || this.disposed) {
       return;
@@ -79,11 +122,12 @@ export class AudioEngineService {
     this.guard(() => this.backend.silenceDrones());
   }
 
-  schedulePulses(pulses: readonly PulseInstruction[]): void {
+  schedulePulses(pulses: readonly PulseInstruction[]): PulseInstruction[] {
     if (!this.backend.running || this.disposed) {
-      return;
+      return [];
     }
-    this.guard(() => {
+    const accepted: PulseInstruction[] = [];
+    try {
       const now = this.backend.currentTime();
       this.pulseEnds = this.pulseEnds.filter((end) => end > now);
       for (const pulse of pulses) {
@@ -92,8 +136,12 @@ export class AudioEngineService {
         }
         this.backend.schedulePulse(pulse);
         this.pulseEnds.push(pulse.when + pulse.durationSeconds + 0.45);
+        accepted.push(pulse);
       }
-    });
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'Audio stopped.');
+    }
+    return accepted;
   }
 
   stop(): void {
@@ -112,6 +160,7 @@ export class AudioEngineService {
       return;
     }
     this.disposed = true;
+    this.clearRecordingTimer();
     this.backend.dispose();
     this.running.set(false);
   }
@@ -121,6 +170,13 @@ export class AudioEngineService {
       action();
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : 'Audio stopped.');
+    }
+  }
+
+  private clearRecordingTimer(): void {
+    if (this.recordingTimer !== null) {
+      clearTimeout(this.recordingTimer);
+      this.recordingTimer = null;
     }
   }
 }

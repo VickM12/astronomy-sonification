@@ -114,9 +114,15 @@ Two kinds of instrument exist. Sine, warm pad, bell, pluck, and deep bass are sy
 
 This is the one runtime network dependency in the app. Everything else runs from the bundle.
 
-The sheet-music export names each part by its instrument in musical mode. In scientific mode every part is a sine and the parts carry only the planet name.
+The recorder taps the stereo signal after the master limiter, so WAV contains the mix and effects
+that were actually heard. A take is limited to five minutes to bound browser memory. Its event,
+pitch, instrument, gain, and tempo timeline also drives the MIDI, spectral SVG, and PDF score.
 
-MIDI cannot store every scientific frequency. When MIDI export exists, the documentation will state the note-number or pitch-bend approximation. Scientific drones remain available as audio even when MIDI is a poor fit. WAV and MIDI export are not in this build.
+The sheet-music export names each part by its instrument and places recorded crossings on the
+captured beat timeline. MIDI rounds sounding hertz to the nearest equal-tempered note, writes one
+track per body, and uses General MIDI program approximations; it cannot reproduce the original
+sample libraries or arbitrary scientific frequencies exactly. The WAV remains the authoritative
+audio recording.
 
 ## Clocks
 

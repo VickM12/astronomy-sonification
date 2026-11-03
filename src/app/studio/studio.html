@@ -336,26 +336,28 @@
 
     <h3>Export</h3>
     <p class="lede">
-      The spectral image draws the sounding hertz across the span, with ticks where a meridian
-      pulse or alignment would play. Sheet music downloads as a PDF score in 4/4, ready to send
-      to players. Each planet is a part, named with its instrument in musical mode. A crossing is
-      a quarter or an eighth; the other beats are rests. The first page states how many simulated
-      days one quarter note lasts.
+      Record a live performance, including changes you make while it plays. WAV, MIDI, spectral
+      image, and PDF score then share that exact take. MIDI instruments are General MIDI
+      approximations. Recording stops automatically after five minutes.
     </p>
     <div class="export-row">
-      <label class="stack-field">
-        Span (days)
-        <input
-          type="number"
-          min="1"
-          max="2000"
-          step="1"
-          [value]="exportDays()"
-          (change)="setExportDays($event)"
-        />
-      </label>
-      <button type="button" (click)="exportSpectrum()">Spectral image</button>
-      <button type="button" (click)="exportSheet()">Sheet music (PDF)</button>
+      @if (performance.recording()) {
+        <button type="button" class="recording" (click)="stopRecording()">
+          Stop recording · {{ formatRecordingTime(recordingSeconds()) }}
+        </button>
+      } @else {
+        <button type="button" (click)="startRecording()" [disabled]="audio.preparing()">
+          {{ audio.preparing() ? 'Preparing instruments…' : 'Record' }}
+        </button>
+      }
+      <button type="button" (click)="exportWav()" [disabled]="!performance.latest()">WAV</button>
+      <button type="button" (click)="exportMidi()" [disabled]="!performance.latest()">MIDI</button>
+      <button type="button" (click)="exportSpectrum()" [disabled]="!performance.latest()">
+        Spectral image
+      </button>
+      <button type="button" (click)="exportSheet()" [disabled]="!performance.latest()">
+        Sheet music (PDF)
+      </button>
     </div>
 
     <h3>Crossings</h3>

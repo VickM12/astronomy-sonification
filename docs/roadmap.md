@@ -49,12 +49,16 @@ Status: not started.
 
 ## Milestone 5 — Export
 
-Status: spectral image and a PDF score download from the observation panel. WAV, MIDI, and JSON presets are not started.
+Status: live WAV, MIDI, spectral image, and PDF score exports are implemented. JSON presets are
+not started.
 
-- Spectral SVG of the sounding hertz over a chosen span, with ticks for pulses that would play.
+- A Start/Stop recorder captures the post-limiter stereo mix for up to five minutes. All four
+  exports use that same take, including live pitch, mix, visibility, instrument, and tempo changes.
+- Spectral SVG of the recorded sounding hertz, with ticks for pulses that actually played.
 - Sheet music as a PDF written by `src/app/export/score-engraving.ts` with no PDF library: a 4/4 score, one part per sounding planet, quarters and eighths at meridian crossings and alignments, rests elsewhere, Times for words and vector paths for every musical glyph. The first page states the tempo and how many simulated days one quarter note spans. The written pitch is the nearest equal-tempered note, and the page says so.
-- Offline WAV render.
-- MIDI, with the pitch approximation written down.
+- Stereo 16-bit PCM WAV from the browser audio graph.
+- Format-1 MIDI with body tracks, tempo changes, drones, pulses, gains, and documented General MIDI
+  instrument approximations.
 - JSON preset import and export.
 
 The render must use the simulation clock, not the animation frame.

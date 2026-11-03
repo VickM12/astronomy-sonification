@@ -10,8 +10,15 @@ import type {
   ToneAudioBuffer,
   ToneAudioBuffers,
 } from 'tone';
+import {
+  addAudioWorkletModule,
+  AudioWorkletNode as StandardizedAudioWorkletNode,
+  IAudioContext,
+  IAudioWorkletNode,
+} from 'standardized-audio-context';
 import { DroneInstruction, PulseInstruction } from '../sonification/plan';
 import { InstrumentId } from '../sonification/sound-model';
+import { PcmRecording } from '../export/wav';
 import { AudioBackend } from './audio-backend';
 import {
   SAMPLE_BASE_URL,
@@ -61,6 +68,12 @@ interface SampleSet {
   loaded: boolean;
   failed: boolean;
   pulses: Sampler | null;
+  ready: Promise<void>;
+}
+
+interface RecorderChunkMessage {
+  left: Float32Array;
+  right: Float32Array;
 }
 
 /**
@@ -231,6 +244,10 @@ export class ToneAudioBackend implements AudioBackend {
   private readonly samples = new Map<InstrumentId, SampleSet>();
   private pulses: LivePulse[] = [];
   private mix = { master: Number.NaN, reverb: Number.NaN, delay: Number.NaN };
+  private recorder: IAudioWorkletNode<IAudioContext> | null = null;
+  private recorderError: string | null = null;
+  private recordedLeft: Float32Array[] = [];
+  private recordedRight: Float32Array[] = [];
 
   async start(): Promise<void> {
     if (this.running || this.disposed) {
@@ -239,7 +256,7 @@ export class ToneAudioBackend implements AudioBackend {
     const tone = await import('tone');
     await tone.start();
     this.tone = tone;
-    this.limiter = new tone.Limiter(-2).toDestination();
+    this.limiter = new tone.Limiter(-2);
     this.bus = new tone.Gain(0.6);
     this.reverb = new tone.Reverb({ decay: 2.4, preDelay: 0.02, wet: 1 });
     this.delay = new tone.FeedbackDelay({ delayTime: 0.22, feedback: 0.28, wet: 1 });
@@ -253,6 +270,7 @@ export class ToneAudioBackend implements AudioBackend {
     this.bus.connect(this.delay);
     this.delay.connect(this.delaySend);
     this.delaySend.connect(this.limiter);
+    await this.connectOutput(tone);
     void this.reverb.ready.catch(() => undefined);
     this.running = true;
   }
@@ -266,6 +284,46 @@ export class ToneAudioBackend implements AudioBackend {
     return [...this.samples.entries()]
       .filter(([, set]) => !set.loaded && !set.failed)
       .map(([id]) => id);
+  }
+
+  async prepareInstruments(instruments: readonly InstrumentId[]): Promise<void> {
+    const pending = [...new Set(instruments)]
+      .map((instrument) => this.sampleSet(instrument))
+      .filter((set): set is SampleSet => set !== null)
+      .map((set) => set.ready);
+    await Promise.all(pending);
+  }
+
+  startRecording(): void {
+    if (!this.recorder) {
+      throw new Error(this.recorderError ?? 'This browser cannot record audio.');
+    }
+    this.recordedLeft = [];
+    this.recordedRight = [];
+    this.recorder.port.postMessage('start');
+  }
+
+  async stopRecording(): Promise<PcmRecording> {
+    if (!this.recorder || !this.tone) {
+      throw new Error(this.recorderError ?? 'This browser cannot record audio.');
+    }
+    const recorder = this.recorder;
+    const tone = this.tone;
+    await new Promise<void>((resolve) => {
+      const listener = (event: MessageEvent<unknown>): void => {
+        if (event.data !== 'stopped') {
+          return;
+        }
+        recorder.port.removeEventListener('message', listener);
+        resolve();
+      };
+      recorder.port.addEventListener('message', listener);
+      recorder.port.postMessage('stop');
+    });
+    return {
+      sampleRate: tone.getContext().sampleRate,
+      channels: [this.recordedLeft, this.recordedRight],
+    };
   }
 
   setMix(masterGain: number, reverb: number, delay: number): void {
@@ -396,6 +454,8 @@ export class ToneAudioBackend implements AudioBackend {
     this.delaySend?.dispose();
     this.bus?.dispose();
     this.limiter?.dispose();
+    this.recorder?.disconnect();
+    this.recorder = null;
     this.running = false;
   }
 
@@ -554,7 +614,11 @@ export class ToneAudioBackend implements AudioBackend {
     // Each file is added on its own so one missing recording costs one note,
     // and the rest of the instrument still arrives.
     const buffers = new this.tone.ToneAudioBuffers();
-    const set: SampleSet = { buffers, loaded: false, failed: false, pulses: null };
+    let settleReady: () => void = () => undefined;
+    const ready = new Promise<void>((resolve) => {
+      settleReady = resolve;
+    });
+    const set: SampleSet = { buffers, loaded: false, failed: false, pulses: null, ready };
     const urls = sampleUrls(spec);
     let pending = Object.keys(urls).length;
     let arrived = 0;
@@ -568,6 +632,7 @@ export class ToneAudioBackend implements AudioBackend {
       } else {
         set.failed = true;
       }
+      settleReady();
     };
     for (const [note, file] of Object.entries(urls)) {
       buffers.add(
@@ -608,6 +673,41 @@ export class ToneAudioBackend implements AudioBackend {
       }
       return false;
     });
+  }
+
+  private async connectOutput(tone: ToneModule): Promise<void> {
+    if (!this.limiter) {
+      return;
+    }
+    const raw = tone.getContext().rawContext;
+    if (!addAudioWorkletModule || !StandardizedAudioWorkletNode) {
+      this.limiter.toDestination();
+      this.recorderError = 'AudioWorklet recording is not supported by this browser.';
+      return;
+    }
+    const context = raw as unknown as IAudioContext;
+    try {
+      await addAudioWorkletModule(context, 'harmonia-recorder.worklet.js');
+      const recorder = new StandardizedAudioWorkletNode(context, 'harmonia-recorder', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+      });
+      recorder.port.onmessage = (event: MessageEvent<RecorderChunkMessage | string>): void => {
+        if (typeof event.data === 'string') {
+          return;
+        }
+        this.recordedLeft.push(event.data.left);
+        this.recordedRight.push(event.data.right);
+      };
+      this.limiter.connect(recorder as unknown as AudioNode);
+      recorder.connect(context.destination);
+      this.recorder = recorder;
+    } catch (error) {
+      this.limiter.toDestination();
+      this.recorderError =
+        error instanceof Error ? error.message : 'The audio recorder could not start.';
+    }
   }
 }
 

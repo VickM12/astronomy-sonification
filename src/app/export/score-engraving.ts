@@ -108,7 +108,7 @@ export function engraveVoice(capture: SonificationCapture, voiceId: string): Eng
   if (!voice) {
     return [];
   }
-  const measures = measureCountFor(capture.spanDays);
+  const measures = scoreMeasureCount(capture);
   const slots = attackSlots(voice, capture, measures * 8);
   return Array.from({ length: measures }, (_, measure) =>
     spellMeasure(slots.slice(measure * 8, measure * 8 + 8)),
@@ -119,7 +119,7 @@ export function engraveScore(capture: SonificationCapture): EngravedSystem[] {
   const voices = [...capture.voices].sort(
     (left, right) => (right.points[0]?.midi ?? 0) - (left.points[0]?.midi ?? 0),
   );
-  const measures = measureCountFor(capture.spanDays);
+  const measures = scoreMeasureCount(capture);
   const quarterDays = capture.spanDays / (measures * 4);
   const parts: PartLayout[] = voices.map((voice) => {
     const bars = engraveVoice(capture, voice.id);
@@ -254,7 +254,7 @@ export function buildScorePdf(capture: SonificationCapture): string {
   );
   const catalogId = add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
   const infoId = add(
-    `<< /Title (Harmonia Mundi) /Producer (Harmonia Mundi) /Subject (${pdfString(`${capture.startIso} ${capture.spanDays} simulated days`)}) >>`,
+    `<< /Title (Harmonia Mundi) /Producer (Harmonia Mundi) /Subject (${pdfString(`${capture.startIso} ${capture.durationSeconds === undefined ? `${capture.spanDays} simulated days` : `${capture.durationSeconds.toFixed(1)} recorded seconds`}`)}) >>`,
   );
 
   let out = '%PDF-1.4\n';
@@ -390,13 +390,23 @@ function renderSystem(
   if (first) {
     shapes.push(text(48, 32, 'Harmonia Mundi', 22, INK));
     shapes.push(
-      text(48, 52, `${capture.startIso} · ${capture.spanDays} simulated days · 4/4`, 13, QUIET),
+      text(
+        48,
+        52,
+        capture.durationSeconds === undefined
+          ? `${capture.startIso} · ${capture.spanDays} simulated days · 4/4`
+          : `${capture.startIso} to ${capture.endIso ?? ''} · ${capture.durationSeconds.toFixed(1)} recorded seconds · 4/4`,
+        13,
+        QUIET,
+      ),
     );
     shapes.push(
       text(
         48,
         70,
-        `Quarter note = ${TEMPO}. One quarter note = ${formatDays(quarterDays)} simulated days. Sempre staccato.`,
+        capture.durationSeconds === undefined
+          ? `Quarter note = ${TEMPO}. One quarter note = ${formatDays(quarterDays)} simulated days. Sempre staccato.`
+          : `Quarter note = ${capture.tempoBpm ?? TEMPO}. Recorded performance; later tempo changes are marked by system. Sempre staccato.`,
         13,
         QUIET,
       ),
@@ -411,7 +421,19 @@ function renderSystem(
       ),
     );
   } else {
-    shapes.push(text(48, 18, `Harmonia Mundi · measure ${measureStart + 1}`, 12, QUIET));
+    const tempo = capture.tempoChanges?.find(
+      (change) =>
+        change.beat >= measureStart * 4 && change.beat < (measureStart + measureCount) * 4,
+    );
+    shapes.push(
+      text(
+        48,
+        18,
+        `Harmonia Mundi · measure ${measureStart + 1}${tempo ? ` · quarter = ${tempo.bpm}` : ''}`,
+        12,
+        QUIET,
+      ),
+    );
   }
   if (parts.length === 0) {
     shapes.push(text(48, header + 28, 'No sounding planets in this span.', 16, INK));
@@ -804,14 +826,19 @@ function attackSlots(
   eighths: number,
 ): (string | null)[] {
   const slots: (string | null)[] = Array.from({ length: eighths }, () => null);
-  const span = capture.spanDays || 1;
   for (const mark of capture.marks) {
     if (!mark.bodyIds.includes(voice.id) || slots.length === 0) {
       continue;
     }
-    const index = Math.min(eighths - 1, Math.max(0, Math.floor((mark.day / span) * eighths)));
+    const index =
+      mark.beat === undefined
+        ? Math.min(
+            eighths - 1,
+            Math.max(0, Math.floor((mark.day / (capture.spanDays || 1)) * eighths)),
+          )
+        : Math.min(eighths - 1, Math.max(0, Math.floor(mark.beat * 2)));
     if (!slots[index]) {
-      slots[index] = writtenNote(voice, mark.day);
+      slots[index] = writtenNote(voice, mark.beat ?? mark.day);
     }
   }
   return slots;
@@ -821,8 +848,8 @@ function attackSlots(
  * A part whose pitch wobbles by at most a semitone across the span is written
  * on its most common note, so a steady drone reads as one pitch.
  */
-function writtenNote(voice: ScoreVoice, day: number): string {
-  const point = nearestPoint(voice, day);
+function writtenNote(voice: ScoreVoice, coordinate: number): string {
+  const point = nearestPoint(voice, coordinate);
   const midis = voice.points.map((item) => item.midi);
   if (midis.length === 0 || Math.max(...midis) - Math.min(...midis) > 1) {
     return point.note;
@@ -842,14 +869,24 @@ function writtenNote(voice: ScoreVoice, day: number): string {
   return chosen;
 }
 
-function nearestPoint(voice: ScoreVoice, day: number): ScorePoint {
+function nearestPoint(voice: ScoreVoice, coordinate: number): ScorePoint {
   const first = voice.points[0];
   if (!first) {
-    return { day, hz: 0, midi: 60, note: 'C4' };
+    return { day: coordinate, hz: 0, midi: 60, note: 'C4' };
   }
   return voice.points.reduce((best, candidate) =>
-    Math.abs(candidate.day - day) < Math.abs(best.day - day) ? candidate : best,
+    Math.abs((candidate.beat ?? candidate.day) - coordinate) <
+    Math.abs((best.beat ?? best.day) - coordinate)
+      ? candidate
+      : best,
   );
+}
+
+function scoreMeasureCount(capture: SonificationCapture): number {
+  if (capture.durationBeats === undefined) {
+    return measureCountFor(capture.spanDays);
+  }
+  return Math.min(256, Math.max(1, Math.ceil(capture.durationBeats / 4)));
 }
 
 function spellRests(start: number, end: number): EngravedToken[] {

@@ -3,6 +3,7 @@ import { AudioEngineService } from './audio-engine.service';
 import { SoundSettingsService } from './sound-settings.service';
 import { OrbitalSimulationService, SimulationStep } from '../simulation/orbital-simulation.service';
 import { buildAudioPlan } from '../sonification/plan';
+import { PerformanceCaptureService } from '../export/performance-capture';
 
 /**
  * Listens to simulation steps and keeps the drones matched to the current states.
@@ -13,6 +14,7 @@ export class SonificationSession {
   private readonly simulation = inject(OrbitalSimulationService);
   private readonly audio = inject(AudioEngineService);
   private readonly sound = inject(SoundSettingsService);
+  private readonly capture = inject(PerformanceCaptureService);
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
@@ -38,13 +40,16 @@ export class SonificationSession {
   private followRunning(): void {
     const snapshot = this.sound.snapshot();
     const playing = this.simulation.playing();
+    const time = this.simulation.simulationTime() ?? new Date(0);
+    const audioNow = this.audio.currentTime();
+    this.capture.captureTempo(audioNow, snapshot.tempoBpm);
     this.audio.setMix(snapshot.masterGain, snapshot.reverb, snapshot.delay);
     if (!playing || !snapshot.drones) {
       this.audio.silenceDrones();
+      this.capture.captureDrones(audioNow, time, []);
       return;
     }
     const states = this.simulation.states();
-    const time = this.simulation.simulationTime() ?? new Date(0);
     const plan = buildAudioPlan({
       states,
       pitch: this.sound.pitchSettings(),
@@ -55,7 +60,7 @@ export class SonificationSession {
       time,
       simulatedDays: 0,
       compressionSecondsPerDay: snapshot.compressionSecondsPerDay,
-      audioNow: this.audio.currentTime(),
+      audioNow,
       playing: true,
       dronesEnabled: true,
       pulsesEnabled: false,
@@ -67,6 +72,7 @@ export class SonificationSession {
       delay: snapshot.delay,
     });
     this.audio.syncDrones(plan.drones);
+    this.capture.captureDrones(audioNow, time, plan.drones);
   }
 
   private onStep(step: SimulationStep): void {
@@ -103,6 +109,7 @@ export class SonificationSession {
       reverb: snapshot.reverb,
       delay: snapshot.delay,
     });
-    this.audio.schedulePulses(plan.pulses);
+    const accepted = this.audio.schedulePulses(plan.pulses);
+    this.capture.capturePulses(accepted);
   }
 }

@@ -19,6 +19,9 @@ export interface PulseInstruction {
   durationSeconds: number;
   when: number;
   instrument: InstrumentId;
+  eventType?: OrbitalEvent['type'];
+  eventTimeIso?: string;
+  eventBodyIds?: readonly string[];
 }
 
 export interface AudioPlan {
@@ -184,6 +187,9 @@ export function buildAudioPlan(input: PlanInput): AudioPlan {
           input.audioNow,
         ),
         instrument,
+        eventType: event.type,
+        eventTimeIso: event.simulationTime.toISOString(),
+        eventBodyIds: ids,
       });
     }
   }

@@ -31,7 +31,9 @@ npm run build
 - Turn on Jupiter's moons. Io, Europa, Ganymede, and Callisto are placed from Jupiter and pitched so their period ratios stay intact.
 - Jump to the next planetary conjunction or opposition.
 - Give each planet an instrument. Strings, cello, flute, bassoon, clarinet, French horn, trumpet, harp, and piano play recordings from [tonejs-instruments](https://github.com/nbrosowsky/tonejs-instruments) (CC BY 3.0), fetched from a CDN on first use. Sine, pad, bell, pluck, and deep bass are synthesized.
-- Download a spectral image or a PDF score of the span you choose.
+- Record up to five minutes of a live performance, including control changes, then download the
+  same take as WAV, MIDI, a spectral SVG, or a PDF score. MIDI instrument programs are General
+  MIDI approximations of the recorded sounds.
 - Drag the view to orbit the Sun, and scroll to zoom. Distances are square-root compressed and planet sizes are exaggerated. The view says so.
 
 Settings are stored in the browser under `harmonia-mundi.preferences.v1`. Older saves without a sound block still load.

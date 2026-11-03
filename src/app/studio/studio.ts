@@ -6,7 +6,14 @@ import { SonificationSession } from '../audio/sonification-session';
 import { SoundSettingsService } from '../audio/sound-settings.service';
 import { describeOrbitalEvent } from '../domain/orbital-event';
 import { buildScorePdf } from '../export/score-engraving';
-import { buildSpectrumSvg, captureSonification, downloadText } from '../export/sonification-score';
+import {
+  buildSpectrumSvg,
+  captureRecordedPerformance,
+  downloadBlob,
+  downloadText,
+} from '../export/sonification-score';
+import { PerformanceCaptureService } from '../export/performance-capture';
+import { buildMidi } from '../export/midi';
 import { MOONS, isMoonId } from '../domain/moons';
 import { PLANETS, planetName } from '../domain/planets';
 import { findNextAlignment } from '../simulation/find-alignment';
@@ -45,6 +52,7 @@ export class Studio implements OnDestroy {
   protected readonly audio = inject(AudioEngineService);
   private readonly session = inject(SonificationSession);
   private readonly astronomy = inject(AstronomyService);
+  protected readonly performance = inject(PerformanceCaptureService);
 
   protected readonly hidden = signal<string[]>([]);
   protected readonly showOrbits = signal(true);
@@ -52,7 +60,7 @@ export class Studio implements OnDestroy {
   protected readonly epochText = signal('');
   protected readonly pulsed = signal<ReadonlySet<string>>(new Set());
   protected readonly alignmentText = signal<string | null>(null);
-  protected readonly exportDays = signal(365);
+  protected readonly recordingSeconds = signal(0);
 
   protected readonly bodies = computed(() =>
     this.simulation.moonsEnabled() ? [...PLANETS, ...MOONS] : [...PLANETS],
@@ -110,6 +118,8 @@ export class Studio implements OnDestroy {
   );
 
   private pulseTimer: ReturnType<typeof setTimeout> | null = null;
+  private recordingClock: ReturnType<typeof setInterval> | null = null;
+  private recordingWallStart = 0;
 
   constructor() {
     const stored = loadPreferences();
@@ -154,6 +164,11 @@ export class Studio implements OnDestroy {
           this.pulsed.set(new Set());
           this.pulseTimer = null;
         }, 700);
+      }
+    });
+    effect(() => {
+      if (this.audio.recordingLimitReached() && this.performance.recording()) {
+        void this.stopRecording();
       }
     });
   }
@@ -221,6 +236,10 @@ export class Studio implements OnDestroy {
   }
 
   protected pause(): void {
+    if (this.performance.recording()) {
+      void this.stopRecording();
+      return;
+    }
     this.simulation.pause();
     this.audio.stop();
   }
@@ -266,6 +285,8 @@ export class Studio implements OnDestroy {
     if (this.pulseTimer !== null) {
       clearTimeout(this.pulseTimer);
     }
+    this.clearRecordingClock();
+    this.performance.cancel();
     this.pause();
   }
 
@@ -448,48 +469,95 @@ export class Studio implements OnDestroy {
     }
   }
 
-  protected setExportDays(event: Event): void {
-    const value = numberFrom(event);
-    if (value !== null) {
-      this.exportDays.set(Math.min(2000, Math.max(1, Math.round(value))));
-    }
-  }
-
   protected exportSpectrum(): void {
-    const capture = this.captureScore();
-    if (capture) {
-      downloadText('harmonia-mundi-spectrum.svg', 'image/svg+xml', buildSpectrumSvg(capture));
-    }
+    const capture = this.recordedCapture();
+    if (!capture) return;
+    downloadText('harmonia-mundi-spectrum.svg', 'image/svg+xml', buildSpectrumSvg(capture));
   }
 
   protected exportSheet(): void {
-    const capture = this.captureScore();
-    if (capture) {
-      downloadText('harmonia-mundi-score.pdf', 'application/pdf', buildScorePdf(capture));
+    const capture = this.recordedCapture();
+    if (!capture) return;
+    downloadText('harmonia-mundi-score.pdf', 'application/pdf', buildScorePdf(capture));
+  }
+
+  protected exportWav(): void {
+    const take = this.performance.latest();
+    if (take) downloadBlob('harmonia-mundi-performance.wav', take.wav);
+  }
+
+  protected exportMidi(): void {
+    const take = this.performance.latest();
+    if (take) {
+      const midi = buildMidi(take);
+      const bytes = new ArrayBuffer(midi.byteLength);
+      new Uint8Array(bytes).set(midi);
+      downloadBlob('harmonia-mundi-performance.mid', new Blob([bytes], { type: 'audio/midi' }));
     }
   }
 
-  private captureScore() {
-    const start = this.simulation.simulationTime();
-    if (!start) {
-      return null;
+  protected async startRecording(): Promise<void> {
+    if (this.performance.latest() && !window.confirm('Replace the previous recording?')) {
+      return;
+    }
+    const time = this.simulation.simulationTime();
+    if (!time || !(await this.audio.start())) {
+      return;
     }
     try {
-      return captureSonification(this.astronomy, {
-        start,
-        spanDays: this.exportDays(),
-        includeMoons: this.simulation.moonsEnabled(),
-        pitch: this.sound.pitchSettings(),
-        mixes: this.sound.snapshot().planets,
-        hiddenIds: this.hidden(),
-        pulses: this.sound.pulses(),
-        alignments: this.sound.alignments(),
-      });
+      const snapshot = this.sound.snapshot();
+      await this.audio.prepareInstruments([
+        ...new Set(Object.values(snapshot.planets).map((mix) => mix.instrument)),
+      ]);
+      this.audio.startRecording();
+      this.performance.begin(this.audio.currentTime(), time, snapshot.tempoBpm);
+      this.recordingWallStart = performance.now();
+      this.recordingSeconds.set(0);
+      this.recordingClock = setInterval(() => {
+        this.recordingSeconds.set((performance.now() - this.recordingWallStart) / 1000);
+      }, 200);
+      this.simulation.play();
     } catch (error) {
-      this.simulation.error.set(
-        error instanceof Error ? error.message : 'The score could not be built.',
-      );
-      return null;
+      this.audio.error.set(error instanceof Error ? error.message : 'Recording could not start.');
+      this.performance.cancel();
+    }
+  }
+
+  protected async stopRecording(): Promise<void> {
+    if (!this.performance.recording()) {
+      return;
+    }
+    this.simulation.pause();
+    this.clearRecordingClock();
+    try {
+      const stopAudioTime = this.audio.currentTime();
+      const wav = await this.audio.stopRecording();
+      const time = this.simulation.simulationTime();
+      if (time) {
+        this.performance.finish(stopAudioTime, time, wav);
+      }
+    } catch (error) {
+      this.performance.cancel();
+      this.audio.error.set(error instanceof Error ? error.message : 'Recording could not stop.');
+    } finally {
+      this.audio.stop();
+    }
+  }
+
+  protected formatRecordingTime(seconds: number): string {
+    const whole = Math.max(0, Math.floor(seconds));
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+  }
+
+  private recordedCapture() {
+    const take = this.performance.latest();
+    return take ? captureRecordedPerformance(take) : null;
+  }
+
+  private clearRecordingClock(): void {
+    if (this.recordingClock !== null) {
+      clearInterval(this.recordingClock);
+      this.recordingClock = null;
     }
   }
 

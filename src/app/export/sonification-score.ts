@@ -8,12 +8,16 @@ import { heardFrequency } from '../sonification/plan';
 import { readPitches } from '../sonification/pitch';
 import { frequencyToMidi, noteName } from '../sonification/scales';
 import { PitchSettings, PlanetMix, instrumentLabel } from '../sonification/sound-model';
+import { RecordedPerformance } from './performance-capture';
+import { ticksAt } from './midi';
 
 const DISCLAIMER =
   'Written pitches are the nearest equal-tempered notes to the sounding hertz. The lines are those hertz, not a spectrum of a recording.';
 
 export interface ScorePoint {
   day: number;
+  second?: number;
+  beat?: number;
   hz: number;
   midi: number;
   note: string;
@@ -30,16 +34,67 @@ export interface ScoreVoice {
 
 export interface ScoreMark {
   day: number;
+  second?: number;
+  beat?: number;
   type: OrbitalEventType;
   bodyIds: string[];
 }
 
 export interface SonificationCapture {
   startIso: string;
+  endIso?: string;
   spanDays: number;
+  durationSeconds?: number;
+  durationBeats?: number;
+  tempoBpm?: number;
+  tempoChanges?: { beat: number; bpm: number }[];
   voices: ScoreVoice[];
   marks: ScoreMark[];
   disclaimer: string;
+}
+
+export function captureRecordedPerformance(performance: RecordedPerformance): SonificationCapture {
+  const voices: ScoreVoice[] = performance.voices.map((voice) => {
+    const first = voice.points[0];
+    const instruments = [
+      ...new Set(voice.points.map((point) => instrumentLabel(point.instrument))),
+    ];
+    return {
+      id: voice.id,
+      name: planetName(voice.id),
+      color: swatch(voice.id),
+      ...(first ? { instrument: instruments.join(' → ') } : {}),
+      points: voice.points.map((point) => ({
+        day: point.simulatedDay,
+        second: point.second,
+        beat: ticksAt(point.second, performance.tempos) / 480,
+        hz: point.hz,
+        midi: point.midi,
+        note: point.note,
+      })),
+    };
+  });
+  return {
+    startIso: performance.startIso.replace('.000Z', 'Z'),
+    endIso: performance.endIso.replace('.000Z', 'Z'),
+    spanDays: performance.simulatedSpanDays,
+    durationSeconds: performance.durationSeconds,
+    durationBeats: ticksAt(performance.durationSeconds, performance.tempos) / 480,
+    tempoBpm: performance.tempos[0]?.bpm ?? 120,
+    tempoChanges: performance.tempos.map((tempo) => ({
+      beat: ticksAt(tempo.second, performance.tempos) / 480,
+      bpm: tempo.bpm,
+    })),
+    voices,
+    marks: performance.marks.map((mark) => ({
+      day: mark.simulatedDay,
+      second: mark.second,
+      beat: ticksAt(mark.second, performance.tempos) / 480,
+      type: mark.type,
+      bodyIds: mark.bodyIds,
+    })),
+    disclaimer: DISCLAIMER,
+  };
 }
 
 export interface CaptureOptions {
@@ -130,7 +185,7 @@ export function buildSpectrumSvg(capture: SonificationCapture): string {
     const path = voice.points
       .map((point, index) => {
         const command = index === 0 ? 'M' : 'L';
-        return `${command}${xOf(point.day, capture.spanDays, plot).toFixed(1)},${yOf(point.hz, minHz, maxHz, plot).toFixed(1)}`;
+        return `${command}${xOf(point.second ?? point.day, timelineSpan(capture), plot).toFixed(1)},${yOf(point.hz, minHz, maxHz, plot).toFixed(1)}`;
       })
       .join(' ');
     return `<path d="${path}" fill="none" stroke="${xml(voice.color)}" stroke-width="2"/>`;
@@ -144,7 +199,7 @@ export function buildSpectrumSvg(capture: SonificationCapture): string {
       if (!voice || !point) {
         return '';
       }
-      const x = xOf(mark.day, capture.spanDays, plot);
+      const x = xOf(mark.second ?? mark.day, timelineSpan(capture), plot);
       const y = yOf(point.hz, minHz, maxHz, plot);
       return `<line x1="${x.toFixed(1)}" y1="${(y - 7).toFixed(1)}" x2="${x.toFixed(1)}" y2="${(y + 7).toFixed(1)}" stroke="${xml(voice.color)}" stroke-width="1.5"/>`;
     }),
@@ -175,9 +230,9 @@ export function buildSpectrumSvg(capture: SonificationCapture): string {
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="${width}" height="${height}" fill="#07090e"/>
   <text x="72" y="32" fill="#e7eef8" font-family="Segoe UI, sans-serif" font-size="20">Harmonia Mundi</text>
-  <text x="72" y="54" fill="#93a4b8" font-family="Segoe UI, sans-serif" font-size="12">${xml(capture.startIso)} · ${capture.spanDays} simulated days</text>
+  <text x="72" y="54" fill="#93a4b8" font-family="Segoe UI, sans-serif" font-size="12">${xml(capture.startIso)} · ${capture.durationSeconds === undefined ? `${capture.spanDays} simulated days` : `${capture.durationSeconds.toFixed(1)} recorded seconds · ${capture.spanDays.toFixed(2)} simulated days`}</text>
   <text x="72" y="72" fill="#93a4b8" font-family="Segoe UI, sans-serif" font-size="12">${xml(capture.disclaimer)}</text>
-  <text x="${plot.x}" y="${axisY}" fill="#93a4b8" font-family="Segoe UI, sans-serif" font-size="12">Simulated days →</text>
+  <text x="${plot.x}" y="${axisY}" fill="#93a4b8" font-family="Segoe UI, sans-serif" font-size="12">${capture.durationSeconds === undefined ? 'Simulated days' : 'Recorded seconds'} →</text>
   ${gridLabels.join('')}
   <clipPath id="plot-clip"><rect x="${plot.x}" y="${plot.y}" width="${plot.w}" height="${plot.h}"/></clipPath>
   <g clip-path="url(#plot-clip)">
@@ -213,13 +268,20 @@ export function buildMusicXml(capture: SonificationCapture): string {
 }
 
 export function downloadText(filename: string, mime: string, contents: string): void {
-  const blob = new Blob([contents], { type: mime });
+  downloadBlob(filename, new Blob([contents], { type: mime }));
+}
+
+export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function timelineSpan(capture: SonificationCapture): number {
+  return (capture.durationSeconds ?? capture.spanDays) || 1;
 }
 
 function renderPart(voice: ScoreVoice, capture: SonificationCapture): string {
