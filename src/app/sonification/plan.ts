@@ -4,12 +4,18 @@ import { isMoonId } from '../domain/moons';
 import { PlanetId, isPlanetId } from '../domain/planets';
 import { readPitches } from './pitch';
 import { InstrumentId, ListenMode, PitchSettings, PlanetMix } from './sound-model';
+import { continuousParameters } from './continuous-mapping';
 
 export interface DroneInstruction {
   planetId: string;
   frequencyHz: number;
   gain: number;
   instrument: InstrumentId;
+  filterHz: number;
+  resonance: number;
+  pan: number;
+  angularRatio: number;
+  detuneCents: number;
 }
 
 export interface PulseInstruction {
@@ -48,6 +54,8 @@ export interface PlanInput {
   dronesEnabled: boolean;
   pulsesEnabled: boolean;
   alignmentsEnabled: boolean;
+  eventEnabled?: boolean;
+  relationshipAmount?: number;
   tempoBpm: number;
   beats: number;
   masterGain: number;
@@ -109,13 +117,30 @@ export function heardFrequency(
 
 export function buildAudioPlan(input: PlanInput): AudioPlan {
   const readings = readPitches(input.states, input.pitch);
+  const continuousReadings = readPitches(input.states, { ...input.pitch, motion: 'fixed' });
   const hidden = new Set(input.hiddenIds ?? []);
   const anySolo = Object.values(input.mixes).some((mix) => mix?.solo);
   const duration = noteDurationSeconds(input.tempoBpm, input.beats);
   const drones: DroneInstruction[] = [];
 
   if (input.playing && input.dronesEnabled) {
-    for (const reading of readings) {
+    const soundingIds = new Set(
+      continuousReadings
+        .filter((reading) => {
+          const mix = input.mixes[reading.planetId];
+          return !hidden.has(reading.planetId) && !!mix && mixGain(mix, anySolo) > 0;
+        })
+        .map((reading) => reading.planetId),
+    );
+    const parameters = new Map(
+      continuousParameters(
+        input.states,
+        soundingIds,
+        input.pitch.modulationDepth,
+        input.relationshipAmount ?? 0.35,
+      ).map((item) => [item.id, item]),
+    );
+    for (const reading of continuousReadings) {
       if (!isPlanetId(reading.planetId) && !isMoonId(reading.planetId)) {
         continue;
       }
@@ -127,17 +152,33 @@ export function buildAudioPlan(input: PlanInput): AudioPlan {
         continue;
       }
       const instrument = input.pitch.mode === 'musical' ? mix.instrument : 'sine';
+      const evolving = parameters.get(reading.planetId) ?? {
+        frequencyMultiplier: 1,
+        gainMultiplier: 1,
+        filterHz: 7000,
+        resonance: 0.7,
+        pan: 0,
+        angularRatio: 1,
+        detuneCents: 0,
+      };
       drones.push({
         planetId: reading.planetId,
-        frequencyHz: heardFrequency(reading.audibleFrequencyHz, input.pitch.mode, instrument),
-        gain: mixGain(mix, anySolo) * DRONE_LEVEL,
+        frequencyHz:
+          heardFrequency(reading.audibleFrequencyHz, input.pitch.mode, instrument) *
+          evolving.frequencyMultiplier,
+        gain: mixGain(mix, anySolo) * DRONE_LEVEL * evolving.gainMultiplier,
         instrument,
+        filterHz: evolving.filterHz,
+        resonance: evolving.resonance,
+        pan: evolving.pan,
+        angularRatio: evolving.angularRatio,
+        detuneCents: evolving.detuneCents,
       });
     }
   }
 
   const pulses: PulseInstruction[] = [];
-  const ordered = [...input.events].sort(compareEvents);
+  const ordered = input.eventEnabled === false ? [] : [...input.events].sort(compareEvents);
   for (const event of ordered) {
     if (pulses.length >= MAX_PULSES) {
       break;

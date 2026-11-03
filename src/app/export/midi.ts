@@ -38,6 +38,15 @@ export function buildMidi(performance: RecordedPerformance): Uint8Array {
       { tick: 0, order: 0, bytes: metaText(0x03, voice.id) },
       { tick: 0, order: 1, bytes: [0xb0 | channel, 7, 100] },
     ];
+    voice.points.forEach((point) => {
+      const tick = ticksAt(point.second, performance.tempos);
+      events.push(
+        { tick, order: 1, bytes: [0xb0 | channel, 7, clamp7(point.gain * 127)] },
+        { tick, order: 1, bytes: [0xb0 | channel, 10, clamp7((point.pan + 1) * 63.5)] },
+        { tick, order: 1, bytes: [0xb0 | channel, 71, clamp7((point.resonance / 8) * 127)] },
+        { tick, order: 1, bytes: [0xb0 | channel, 74, cutoffController(point.filterHz)] },
+      );
+    });
     performance.notes
       .filter((note) => note.bodyId === voice.id)
       .forEach((note) => {
@@ -156,4 +165,9 @@ function midiChannel(index: number): number {
 
 function clamp7(value: number): number {
   return Math.max(0, Math.min(127, Math.round(value)));
+}
+
+function cutoffController(frequencyHz: number): number {
+  const normalized = Math.log2(Math.max(200, frequencyHz) / 200) / Math.log2(12000 / 200);
+  return clamp7(normalized * 127);
 }

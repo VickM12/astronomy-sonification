@@ -113,4 +113,29 @@ describe('sonification score export', () => {
     expect(offbeat[1]).toEqual({ kind: 'note', eighths: 1, note: 'A4', beam: 'none' });
     expect(offbeat.reduce((sum, token) => sum + token.eighths, 0)).toBe(8);
   });
+
+  it('engraves a continuous recording as held whole-note bars', () => {
+    const score = {
+      startIso: '2026-01-01T00:00:00Z',
+      spanDays: 2,
+      durationSeconds: 4,
+      durationBeats: 8,
+      tempoBpm: 120,
+      texture: 'continuous' as const,
+      voices: [
+        {
+          id: 'earth',
+          name: 'Earth',
+          color: '#6aa6e6',
+          points: [{ day: 0, second: 0, beat: 0, hz: 440, midi: 69, note: 'A4' }],
+        },
+      ],
+      marks: [],
+      disclaimer: 'Creative mapping.',
+    };
+    const bars = engraveVoice(score, 'earth');
+    expect(bars).toHaveLength(2);
+    expect(bars[0]).toEqual([{ kind: 'note', eighths: 8, note: 'A4', beam: 'none' }]);
+    expect(buildScoreSvg(score)).toContain('Whole notes are the recorded continuous voices');
+  });
 });

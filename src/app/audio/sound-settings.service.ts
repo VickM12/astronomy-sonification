@@ -8,11 +8,13 @@ import {
   MappingMode,
   PitchMotion,
   PitchSettings,
+  PlaybackTexture,
   PlanetMix,
   RegisterId,
   ScaleId,
   clampUnit,
   isInstrumentId,
+  isPlaybackTexture,
   isRegisterId,
   isScaleId,
   registerBounds,
@@ -25,6 +27,8 @@ export interface SoundSnapshot {
   motion: PitchMotion;
   modulationDepth: number;
   drones: boolean;
+  texture: PlaybackTexture;
+  relationshipAmount: number;
   pulses: boolean;
   alignments: boolean;
   masterGain: number;
@@ -48,6 +52,8 @@ export class SoundSettingsService {
   readonly motion = signal<PitchMotion>('fixed');
   readonly modulationDepth = signal(0.65);
   readonly drones = signal(true);
+  readonly texture = signal<PlaybackTexture>('hybrid');
+  readonly relationshipAmount = signal(0.35);
   readonly pulses = signal(true);
   readonly alignments = signal(true);
   readonly masterGain = signal(0.6);
@@ -69,6 +75,8 @@ export class SoundSettingsService {
     motion: this.motion(),
     modulationDepth: this.modulationDepth(),
     drones: this.drones(),
+    texture: this.texture(),
+    relationshipAmount: this.relationshipAmount(),
     pulses: this.pulses(),
     alignments: this.alignments(),
     masterGain: this.masterGain(),
@@ -121,6 +129,13 @@ export class SoundSettingsService {
   setMode(value: string): void {
     if (value === 'scientific' || value === 'musical') {
       this.mode.set(value);
+    }
+  }
+
+  setTexture(value: string): void {
+    if (isPlaybackTexture(value)) {
+      this.texture.set(value);
+      this.drones.set(value !== 'event');
     }
   }
 
@@ -192,6 +207,10 @@ export class SoundSettingsService {
     this.harmony.set(clampUnit(value));
   }
 
+  setRelationshipAmount(value: number): void {
+    this.relationshipAmount.set(clampUnit(value));
+  }
+
   setGain(id: string, value: number): void {
     if (!Number.isFinite(value)) {
       return;
@@ -233,6 +252,16 @@ export class SoundSettingsService {
     }
     this.assignNumber(record['modulationDepth'], (depth) => this.setDepth(depth));
     this.assignBoolean(record['drones'], this.drones);
+    if (typeof record['texture'] === 'string') {
+      this.setTexture(record['texture']);
+    } else if (record['drones'] === false) {
+      this.texture.set('event');
+    } else if (record['pulses'] === false && record['alignments'] === false) {
+      this.texture.set('continuous');
+    }
+    this.assignNumber(record['relationshipAmount'], (amount) =>
+      this.relationshipAmount.set(clampUnit(amount)),
+    );
     this.assignBoolean(record['pulses'], this.pulses);
     this.assignBoolean(record['alignments'], this.alignments);
     this.assignNumber(record['masterGain'], (gain) => this.setMaster(gain));

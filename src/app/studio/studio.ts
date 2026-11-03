@@ -21,9 +21,11 @@ import { OrbitalSimulationService } from '../simulation/orbital-simulation.servi
 import { formatHz } from '../sonification/frequency';
 import { heardFrequency } from '../sonification/plan';
 import { readPitches } from '../sonification/pitch';
+import { continuousParameters } from '../sonification/continuous-mapping';
 import {
   BEATS,
   INSTRUMENTS,
+  PLAYBACK_TEXTURES,
   REGISTERS,
   ROOTS,
   SCALES,
@@ -44,6 +46,7 @@ export class Studio implements OnDestroy {
   protected readonly registers = REGISTERS;
   protected readonly instruments = INSTRUMENTS;
   protected readonly beats = BEATS;
+  protected readonly playbackTextures = PLAYBACK_TEXTURES;
   protected readonly formatHz = formatHz;
   protected readonly planetName = planetName;
   protected readonly heardFrequency = heardFrequency;
@@ -116,6 +119,35 @@ export class Studio implements OnDestroy {
   protected readonly pitches = computed(() =>
     readPitches(this.simulation.states(), this.sound.pitchSettings()),
   );
+
+  protected readonly continuousReadout = computed(() => {
+    const snapshot = this.sound.snapshot();
+    const hidden = new Set(this.hidden());
+    const anySolo = Object.values(snapshot.planets).some((mix) => mix.solo);
+    const sounding = new Set(
+      this.simulation
+        .states()
+        .filter((state) => {
+          const mix = this.sound.mixFor(state.id);
+          return !hidden.has(state.id) && !mix.muted && mix.gain > 0 && (!anySolo || mix.solo);
+        })
+        .map((state) => state.id),
+    );
+    const readings = new Map(this.pitches().map((reading) => [reading.planetId, reading]));
+    return continuousParameters(
+      this.simulation.states(),
+      sounding,
+      snapshot.modulationDepth,
+      snapshot.relationshipAmount,
+    ).map((item) => {
+      const reading = readings.get(item.id);
+      const mix = this.sound.mixFor(item.id);
+      const base = reading
+        ? heardFrequency(reading.audibleFrequencyHz, snapshot.mode, mix.instrument)
+        : 0;
+      return { ...item, hz: base * item.frequencyMultiplier };
+    });
+  });
 
   private pulseTimer: ReturnType<typeof setTimeout> | null = null;
   private recordingClock: ReturnType<typeof setInterval> | null = null;
@@ -332,6 +364,14 @@ export class Studio implements OnDestroy {
     }
   }
 
+  protected chooseTexture(event: Event): void {
+    const value = textFrom(event);
+    if (value !== null) {
+      this.sound.setTexture(value);
+      this.remember();
+    }
+  }
+
   protected chooseMapping(event: Event): void {
     const value = textFrom(event);
     if (value !== null) {
@@ -445,6 +485,14 @@ export class Studio implements OnDestroy {
     }
   }
 
+  protected setRelationship(event: Event): void {
+    const value = numberFrom(event);
+    if (value !== null) {
+      this.sound.setRelationshipAmount(value);
+      this.remember();
+    }
+  }
+
   protected setTempo(event: Event): void {
     const value = numberFrom(event);
     if (value !== null) {
@@ -510,7 +558,7 @@ export class Studio implements OnDestroy {
         ...new Set(Object.values(snapshot.planets).map((mix) => mix.instrument)),
       ]);
       this.audio.startRecording();
-      this.performance.begin(this.audio.currentTime(), time, snapshot.tempoBpm);
+      this.performance.begin(this.audio.currentTime(), time, snapshot.tempoBpm, snapshot.texture);
       this.recordingWallStart = performance.now();
       this.recordingSeconds.set(0);
       this.recordingClock = setInterval(() => {

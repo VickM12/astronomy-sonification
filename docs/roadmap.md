@@ -36,6 +36,9 @@ Status: implemented for live playback.
 - Crossing events as rhythm, with an audio-seconds-per-day control that is neither the simulation speed nor the BPM.
 - Harmony from the pitches that are sounding together.
 - Per-planet instrument, mute, solo, and gain.
+- Event, Continuous, and Hybrid textures. Continuous sampled/synth voices map angular velocity,
+  heliocentric distance, longitude, eccentricity, and named planetary relationships into bounded
+  pitch, filter, pan, resonance, and gain changes.
 
 The astronomical simulation stays the one built in Milestone 1.
 

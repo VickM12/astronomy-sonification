@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { OrbitalEventType } from '../domain/orbital-event';
 import { DroneInstruction, PulseInstruction } from '../sonification/plan';
-import { InstrumentId } from '../sonification/sound-model';
+import { InstrumentId, PlaybackTexture } from '../sonification/sound-model';
 import { frequencyToMidi, noteName } from '../sonification/scales';
 
 export interface PerformancePoint {
@@ -12,6 +12,11 @@ export interface PerformancePoint {
   note: string;
   instrument: InstrumentId;
   gain: number;
+  filterHz: number;
+  resonance: number;
+  pan: number;
+  angularRatio: number;
+  detuneCents: number;
 }
 
 export interface PerformanceNote extends PerformancePoint {
@@ -48,6 +53,7 @@ export interface RecordedPerformance {
   marks: PerformanceMark[];
   tempos: TempoChange[];
   wav: Blob;
+  texture: PlaybackTexture;
 }
 
 interface ActiveDrone {
@@ -62,6 +68,7 @@ interface WorkingTake {
   marks: Map<string, PerformanceMark>;
   tempos: TempoChange[];
   active: Map<string, ActiveDrone>;
+  texture: PlaybackTexture;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -70,7 +77,12 @@ export class PerformanceCaptureService {
   readonly latest = signal<RecordedPerformance | null>(null);
   private take: WorkingTake | null = null;
 
-  begin(audioNow: number, simulationTime: Date, tempoBpm: number): void {
+  begin(
+    audioNow: number,
+    simulationTime: Date,
+    tempoBpm: number,
+    texture: PlaybackTexture = 'hybrid',
+  ): void {
     this.take = {
       audioStart: audioNow,
       simulationStart: simulationTime,
@@ -79,6 +91,7 @@ export class PerformanceCaptureService {
       marks: new Map(),
       tempos: [{ second: 0, bpm: tempoBpm }],
       active: new Map(),
+      texture,
     };
     this.recording.set(true);
   }
@@ -202,6 +215,7 @@ export class PerformanceCaptureService {
       marks: [...take.marks.values()].filter((mark) => mark.second < durationSeconds),
       tempos: take.tempos.filter((tempo) => tempo.second <= durationSeconds),
       wav,
+      texture: take.texture,
     };
     this.take = null;
     this.recording.set(false);
@@ -236,7 +250,10 @@ export class PerformanceCaptureService {
 function performancePoint(
   second: number,
   day: number,
-  sound: Pick<DroneInstruction, 'frequencyHz' | 'gain' | 'instrument'>,
+  sound: Pick<DroneInstruction, 'frequencyHz' | 'gain' | 'instrument'> &
+    Partial<
+      Pick<DroneInstruction, 'filterHz' | 'resonance' | 'pan' | 'angularRatio' | 'detuneCents'>
+    >,
 ): PerformancePoint {
   const midi = Math.round(frequencyToMidi(sound.frequencyHz));
   return {
@@ -247,6 +264,11 @@ function performancePoint(
     note: noteName(midi),
     instrument: sound.instrument,
     gain: sound.gain,
+    filterHz: sound.filterHz ?? 12000,
+    resonance: sound.resonance ?? 0.7,
+    pan: sound.pan ?? 0,
+    angularRatio: sound.angularRatio ?? 1,
+    detuneCents: sound.detuneCents ?? 0,
   };
 }
 

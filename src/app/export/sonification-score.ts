@@ -36,7 +36,7 @@ export interface ScoreMark {
   day: number;
   second?: number;
   beat?: number;
-  type: OrbitalEventType;
+  type: OrbitalEventType | 'continuous';
   bodyIds: string[];
 }
 
@@ -48,6 +48,7 @@ export interface SonificationCapture {
   durationBeats?: number;
   tempoBpm?: number;
   tempoChanges?: { beat: number; bpm: number }[];
+  texture?: 'event' | 'continuous' | 'hybrid';
   voices: ScoreVoice[];
   marks: ScoreMark[];
   disclaimer: string;
@@ -85,14 +86,28 @@ export function captureRecordedPerformance(performance: RecordedPerformance): So
       beat: ticksAt(tempo.second, performance.tempos) / 480,
       bpm: tempo.bpm,
     })),
+    texture: performance.texture,
     voices,
-    marks: performance.marks.map((mark) => ({
-      day: mark.simulatedDay,
-      second: mark.second,
-      beat: ticksAt(mark.second, performance.tempos) / 480,
-      type: mark.type,
-      bodyIds: mark.bodyIds,
-    })),
+    marks: [
+      ...performance.marks.map((mark) => ({
+        day: mark.simulatedDay,
+        second: mark.second,
+        beat: ticksAt(mark.second, performance.tempos) / 480,
+        type: mark.type,
+        bodyIds: mark.bodyIds,
+      })),
+      ...(performance.texture === 'event'
+        ? []
+        : performance.notes
+            .filter((note) => note.kind === 'drone' && note.durationSeconds > 0.1)
+            .map((note) => ({
+              day: note.simulatedDay,
+              second: note.second,
+              beat: ticksAt(note.second, performance.tempos) / 480,
+              type: 'continuous' as const,
+              bodyIds: [note.bodyId],
+            }))),
+    ],
     disclaimer: DISCLAIMER,
   };
 }

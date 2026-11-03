@@ -193,43 +193,45 @@
         </label>
       }
       <p class="formula span-2">{{ sound.mappingSummary() }}</p>
-      <div class="check-row">
-        <label>
-          <input
-            type="checkbox"
-            [checked]="sound.drones()"
-            (change)="setFlag('drones', $event)"
-          />
-          Drones
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            [checked]="sound.pulses()"
-            (change)="setFlag('pulses', $event)"
-          />
-          Meridian pulses
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            [checked]="sound.alignments()"
-            (change)="setFlag('alignments', $event)"
-          />
-          Alignments
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            [checked]="sound.motion() === 'velocity'"
-            (change)="setVelocity($event)"
-          />
-          Follow angular speed
-        </label>
-      </div>
-      @if (sound.motion() === 'velocity') {
+      <label class="stack-field">
+        Sonification texture
+        <select [value]="sound.texture()" (change)="chooseTexture($event)">
+          @for (texture of playbackTextures; track texture.id) {
+            <option [value]="texture.id">{{ texture.label }}</option>
+          }
+        </select>
+      </label>
+      @if (sound.texture() !== 'continuous') {
+        <div class="check-row">
+          <label>
+            <input
+              type="checkbox"
+              [checked]="sound.pulses()"
+              (change)="setFlag('pulses', $event)"
+            />
+            Meridian pulses
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              [checked]="sound.alignments()"
+              (change)="setFlag('alignments', $event)"
+            />
+            Alignments
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              [checked]="sound.motion() === 'velocity'"
+              (change)="setVelocity($event)"
+            />
+            Event pitch follows angular speed
+          </label>
+        </div>
+      }
+      @if (sound.texture() !== 'event' || sound.motion() === 'velocity') {
         <label class="stack-field">
-          Speed depth
+          {{ sound.texture() === 'event' ? 'Event speed depth' : 'Continuous motion depth' }}
           <input
             type="range"
             min="0"
@@ -240,6 +242,24 @@
           />
         </label>
         <p class="formula span-2">Pitch uses ω = |r × v| / |r|², compared with the mean motion 2π/P.</p>
+      }
+      @if (sound.texture() !== 'event') {
+        <label class="stack-field">
+          Relationship intensity
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            [value]="sound.relationshipAmount()"
+            (input)="setRelationship($event)"
+          />
+        </label>
+        <p class="formula span-2">
+          Creative mapping: distance changes filter brightness, longitude changes stereo position,
+          eccentricity scales pitch motion, and measured planetary relationships shape gain,
+          resonance, and subtle beating. These are not naturally occurring sounds.
+        </p>
       }
       @if (sound.mode() === 'musical') {
         <label class="stack-field">
@@ -333,6 +353,22 @@
         </li>
       }
     </ul>
+    @if (sound.texture() !== 'event') {
+      <h4>Continuous mapping</h4>
+      <ul class="pitch-list">
+        @for (voice of continuousReadout(); track voice.id) {
+          <li>
+            <strong>{{ planetName(voice.id) }}</strong>
+            {{ formatHz(voice.hz) }} · cutoff {{ voice.filterHz.toFixed(0) }} Hz · pan
+            {{ voice.pan.toFixed(2) }}
+            <span class="formula">
+              ω/ω̄ {{ voice.angularRatio.toFixed(3) }} · relationship detune
+              {{ voice.detuneCents.toFixed(2) }} cents · Q {{ voice.resonance.toFixed(2) }}
+            </span>
+          </li>
+        }
+      </ul>
+    }
 
     <h3>Export</h3>
     <p class="lede">

@@ -109,6 +109,16 @@ export function engraveVoice(capture: SonificationCapture, voiceId: string): Eng
     return [];
   }
   const measures = scoreMeasureCount(capture);
+  if (capture.texture === 'continuous') {
+    return Array.from({ length: measures }, (_, measure) => [
+      {
+        kind: 'note' as const,
+        eighths: 8,
+        note: writtenNote(voice, measure * 4),
+        beam: 'none' as const,
+      },
+    ]);
+  }
   const slots = attackSlots(voice, capture, measures * 8);
   return Array.from({ length: measures }, (_, measure) =>
     spellMeasure(slots.slice(measure * 8, measure * 8 + 8)),
@@ -415,7 +425,11 @@ function renderSystem(
       text(
         48,
         86,
-        'A note is a meridian crossing or an alignment. Events closer than one eighth share that note. Pitches are the nearest equal-tempered notes.',
+        capture.texture === 'continuous'
+          ? 'Whole notes are the recorded continuous voices. Pitch changes re-articulate at the next bar. Pitches are nearest equal-tempered notes.'
+          : capture.texture === 'hybrid'
+            ? 'Continuous voices sustain beneath written meridian and alignment accents. Pitches are nearest equal-tempered notes.'
+            : 'A note is a meridian crossing or an alignment. Events closer than one eighth share that note. Pitches are nearest equal-tempered notes.',
         12,
         QUIET,
       ),
@@ -601,7 +615,11 @@ function singleNote(
   yFor: (position: number) => number,
   active: Map<string, number>,
 ): Shape[] {
-  const note = placeNote(token.note, x, treble, yFor, active);
+  const whole = token.eighths === 8;
+  const note = placeNote(token.note, x, treble, yFor, active, whole);
+  if (whole) {
+    return note.shapes;
+  }
   const down = note.position >= 4;
   const stemX = down ? note.x - 5.2 : note.x + 5.2;
   const stemY = down ? note.y + 28 : note.y - 28;
@@ -618,6 +636,7 @@ function placeNote(
   treble: boolean,
   yFor: (position: number) => number,
   active: Map<string, number>,
+  hollow = false,
 ): PlacedNote {
   const accidental = accidentalFor(note, active);
   const position = staffPosition(note, treble);
@@ -629,6 +648,9 @@ function placeNote(
     shapes.push(...naturalSign(x - 13, y));
   }
   shapes.push(ellipse(x, y, 6, 4.2, -18, INK));
+  if (hollow) {
+    shapes.push(ellipse(x, y, 4, 2.3, -18, PAPER));
+  }
   return { x, y, position, shapes };
 }
 
@@ -915,6 +937,9 @@ function spellRests(start: number, end: number): EngravedToken[] {
 }
 
 export function describeMark(mark: ScoreMark, voiceId: string): string {
+  if (mark.type === 'continuous') {
+    return 'continuous voice change';
+  }
   if (mark.type === 'reference-meridian') {
     return 'crosses 0°';
   }

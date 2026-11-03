@@ -25,6 +25,9 @@ npm run build
 
 - Read heliocentric positions, speeds, and ecliptic longitudes for a UTC date.
 - Press Play. Scientific mode sounds each planet from its sidereal frequency. Musical mode snaps those pitches to a scale.
+- Choose Event notes, Continuous evolving voices, or Hybrid playback. Continuous voices map
+  angular velocity to pitch, Sun distance to filter cutoff, longitude to stereo position, and
+  measured planetary relationships to bounded gain, resonance, and beating.
 - Play, pause, step, and change the simulation speed in days per real-time second. Tempo and audio-seconds-per-day are separate controls.
 - Jump to today, type another UTC instant, or reset to the date you last entered. A seek does not replay the crossings it skipped.
 - Hide planets, orbit samples, and trails. Mute, solo, and gain change what you hear.

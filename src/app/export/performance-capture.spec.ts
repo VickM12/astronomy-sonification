@@ -5,15 +5,9 @@ describe('PerformanceCaptureService', () => {
     const capture = new PerformanceCaptureService();
     const start = new Date('2026-01-01T00:00:00Z');
     capture.begin(10, start, 72);
-    capture.captureDrones(10, start, [
-      { planetId: 'earth', frequencyHz: 440, gain: 0.2, instrument: 'strings' },
-    ]);
-    capture.captureDrones(10.05, start, [
-      { planetId: 'earth', frequencyHz: 440, gain: 0.2, instrument: 'strings' },
-    ]);
-    capture.captureDrones(10.5, start, [
-      { planetId: 'earth', frequencyHz: 440, gain: 0.4, instrument: 'strings' },
-    ]);
+    capture.captureDrones(10, start, [drone(0.2)]);
+    capture.captureDrones(10.05, start, [drone(0.2)]);
+    capture.captureDrones(10.5, start, [drone(0.4)]);
     capture.captureTempo(11, 96);
     capture.capturePulses([
       {
@@ -37,3 +31,17 @@ describe('PerformanceCaptureService', () => {
     expect(take?.tempos.map((tempo) => tempo.bpm)).toEqual([72, 96]);
   });
 });
+
+function drone(gain: number) {
+  return {
+    planetId: 'earth',
+    frequencyHz: 440,
+    gain,
+    instrument: 'strings' as const,
+    filterHz: 3200,
+    resonance: 1,
+    pan: 0.2,
+    angularRatio: 1,
+    detuneCents: 0,
+  };
+}

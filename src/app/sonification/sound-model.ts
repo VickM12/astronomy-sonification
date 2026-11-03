@@ -1,6 +1,7 @@
 import { uniformScaleFactor } from './frequency';
 
 export type ListenMode = 'scientific' | 'musical';
+export type PlaybackTexture = 'event' | 'continuous' | 'hybrid';
 export type MappingMode = 'uniform' | 'octave-fold';
 export type PitchMotion = 'fixed' | 'velocity';
 export type ScaleId = 'chromatic' | 'major' | 'natural-minor' | 'pentatonic';
@@ -93,6 +94,12 @@ export const BEATS = [
   { value: 0.25, label: '1/4 beat' },
 ] as const;
 
+export const PLAYBACK_TEXTURES = [
+  { id: 'event', label: 'Event' },
+  { id: 'continuous', label: 'Continuous' },
+  { id: 'hybrid', label: 'Hybrid' },
+] as const;
+
 const INSTRUMENT_IDS: readonly InstrumentId[] = INSTRUMENTS.map((item) => item.id);
 const SCALE_IDS: readonly ScaleId[] = SCALES.map((item) => item.id);
 
@@ -128,6 +135,10 @@ export function isScaleId(value: string): value is ScaleId {
 
 export function isInstrumentId(value: string): value is InstrumentId {
   return INSTRUMENT_IDS.includes(value as InstrumentId);
+}
+
+export function isPlaybackTexture(value: string): value is PlaybackTexture {
+  return value === 'event' || value === 'continuous' || value === 'hybrid';
 }
 
 export function instrumentLabel(instrument: InstrumentId): string {

@@ -5,6 +5,7 @@ import type {
   Gain,
   Limiter,
   Oscillator,
+  Panner,
   Reverb,
   Sampler,
   ToneAudioBuffer,
@@ -37,9 +38,13 @@ interface SynthVoice {
   oscillator: Oscillator;
   filter: Filter;
   gain: Gain;
+  panner: Panner;
   fresh: boolean;
   lastHz: number;
   lastGain: number;
+  lastFilter: number;
+  lastResonance: number;
+  lastPan: number;
 }
 
 /**
@@ -50,10 +55,15 @@ interface SampledVoice {
   kind: 'sampled';
   instrument: InstrumentId;
   sampler: Sampler;
+  filter: Filter;
   gain: Gain;
+  panner: Panner;
   nextBow: number;
   lastHz: number;
   lastGain: number;
+  lastFilter: number;
+  lastResonance: number;
+  lastPan: number;
 }
 
 type Voice = SynthVoice | SampledVoice;
@@ -487,10 +497,11 @@ export class ToneAudioBackend implements AudioBackend {
       this.voices.set(drone.planetId, voice);
     }
     const level = Math.max(0, drone.gain);
+    this.tuneSpace(voice, drone);
     if (voice.kind === 'synth') {
       this.tuneSynth(voice, frequency);
       const trimmed = level * loudnessTrim(TIMBRES[voice.instrument]);
-      if (trimmed !== voice.lastGain) {
+      if (Math.abs(trimmed - voice.lastGain) >= 0.0005 || !Number.isFinite(voice.lastGain)) {
         voice.lastGain = trimmed;
         voice.gain.gain.rampTo(trimmed, 0.05);
       }
@@ -508,9 +519,11 @@ export class ToneAudioBackend implements AudioBackend {
     const filter = new this.tone.Filter(cutoffHz(frequency, timbre), 'lowpass');
     filter.Q.value = timbre.resonance;
     const gain = new this.tone.Gain(0);
+    const panner = new this.tone.Panner(0);
     oscillator.connect(filter);
     filter.connect(gain);
-    gain.connect(this.bus);
+    gain.connect(panner);
+    panner.connect(this.bus);
     oscillator.start(this.tone.now());
     return {
       kind: 'synth',
@@ -518,9 +531,13 @@ export class ToneAudioBackend implements AudioBackend {
       oscillator,
       filter,
       gain,
+      panner,
       fresh: true,
       lastHz: 0,
       lastGain: Number.NaN,
+      lastFilter: Number.NaN,
+      lastResonance: Number.NaN,
+      lastPan: Number.NaN,
     };
   }
 
@@ -531,30 +548,55 @@ export class ToneAudioBackend implements AudioBackend {
       return null;
     }
     const sampler = this.samplerFrom(set.buffers, spec);
+    const filter = new this.tone.Filter(3000, 'lowpass');
     const gain = new this.tone.Gain(0);
-    sampler.connect(gain);
-    gain.connect(this.bus);
+    const panner = new this.tone.Panner(0);
+    sampler.connect(filter);
+    filter.connect(gain);
+    gain.connect(panner);
+    panner.connect(this.bus);
     return {
       kind: 'sampled',
       instrument,
       sampler,
+      filter,
       gain,
+      panner,
       nextBow: 0,
       lastHz: 0,
       lastGain: Number.NaN,
+      lastFilter: Number.NaN,
+      lastResonance: Number.NaN,
+      lastPan: Number.NaN,
     };
   }
 
   private tuneSynth(voice: SynthVoice, frequency: number): void {
-    const timbre = TIMBRES[voice.instrument];
     const cents = voice.lastHz > 0 ? Math.abs(1200 * Math.log2(frequency / voice.lastHz)) : 1200;
     // Assign the frequency directly. A glide scheduled on every simulation
     // tick never finishes, and the piled-up fades drive the pitch down to silence.
     if (voice.fresh || cents >= 1) {
       voice.oscillator.frequency.value = frequency;
-      voice.filter.frequency.value = cutoffHz(frequency, timbre);
       voice.fresh = false;
       voice.lastHz = frequency;
+    }
+  }
+
+  private tuneSpace(voice: Voice, drone: DroneInstruction): void {
+    if (Math.abs(drone.filterHz - voice.lastFilter) >= 1 || !Number.isFinite(voice.lastFilter)) {
+      voice.lastFilter = drone.filterHz;
+      voice.filter.frequency.rampTo(drone.filterHz, 0.08);
+    }
+    if (
+      Math.abs(drone.resonance - voice.lastResonance) >= 0.01 ||
+      !Number.isFinite(voice.lastResonance)
+    ) {
+      voice.lastResonance = drone.resonance;
+      voice.filter.Q.rampTo(drone.resonance, 0.08);
+    }
+    if (Math.abs(drone.pan - voice.lastPan) >= 0.001 || !Number.isFinite(voice.lastPan)) {
+      voice.lastPan = drone.pan;
+      voice.panner.pan.rampTo(drone.pan, 0.08);
     }
   }
 
@@ -565,7 +607,7 @@ export class ToneAudioBackend implements AudioBackend {
     }
     const spec = SAMPLED_INSTRUMENTS[voice.instrument];
     const bowSeconds = spec?.bowSeconds ?? 2.5;
-    if (level !== voice.lastGain) {
+    if (Math.abs(level - voice.lastGain) >= 0.0005 || !Number.isFinite(voice.lastGain)) {
       voice.lastGain = level;
       voice.gain.gain.rampTo(level, 0.05);
     }
@@ -714,12 +756,13 @@ export class ToneAudioBackend implements AudioBackend {
 function disposeVoice(voice: Voice): void {
   if (voice.kind === 'synth') {
     voice.oscillator.dispose();
-    voice.filter.dispose();
   } else {
     voice.sampler.releaseAll();
     voice.sampler.dispose();
   }
+  voice.filter.dispose();
   voice.gain.dispose();
+  voice.panner.dispose();
 }
 
 /** Lowpass corner that follows the pitch, kept under the oscillator cap. */

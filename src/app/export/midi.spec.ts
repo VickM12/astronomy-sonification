@@ -8,7 +8,28 @@ describe('MIDI export', () => {
       endIso: '2026-01-02T00:00:00Z',
       durationSeconds: 2,
       simulatedSpanDays: 1,
-      voices: [{ id: 'earth', points: [] }],
+      texture: 'continuous',
+      voices: [
+        {
+          id: 'earth',
+          points: [
+            {
+              second: 0,
+              simulatedDay: 0,
+              hz: 440,
+              midi: 69,
+              note: 'A4',
+              instrument: 'strings',
+              gain: 0.5,
+              filterHz: 3200,
+              resonance: 1,
+              pan: 0.25,
+              angularRatio: 1,
+              detuneCents: 0,
+            },
+          ],
+        },
+      ],
       notes: [
         {
           bodyId: 'earth',
@@ -20,6 +41,11 @@ describe('MIDI export', () => {
           note: 'A4',
           instrument: 'strings',
           gain: 0.5,
+          filterHz: 3200,
+          resonance: 1,
+          pan: 0.25,
+          angularRatio: 1,
+          detuneCents: 0,
           kind: 'drone',
         },
       ],
@@ -33,6 +59,9 @@ describe('MIDI export', () => {
     expect([...midi]).toContain(0xc0);
     expect([...midi]).toContain(0x90);
     expect([...midi]).toContain(0x80);
+    expect([...midi]).toContain(10);
+    expect([...midi]).toContain(71);
+    expect([...midi]).toContain(74);
     expect(ticksAt(1, take.tempos)).toBe(480);
   });
 

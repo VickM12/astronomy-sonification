@@ -94,6 +94,22 @@ Moon meridian, revolution, and alignment crossings stay in the event log and on 
 
 Continuous drones, meridian pulses (reference meridian and revolution), and alignment accents (conjunction and opposition) are independent toggles. They consume `PlanetaryState` and `OrbitalEvent`. They do not advance the simulation clock.
 
+### Continuous texture
+
+Event texture sounds crossing notes. Continuous texture keeps the selected instrument voices
+active. Hybrid combines them. For each continuous planet, calculated angular velocity bends the
+base pitch, current distance between its JPL perihelion/aphelion bounds sets a 500–7000 Hz low-pass
+cutoff, and `sin(longitude)` sets stereo pan. JPL J2000 eccentricity constants scale the user’s
+maximum pitch-motion depth. Sampled instruments are periodically re-articulated as before; their
+filter, gain, and pan continue to move between articulations.
+
+The relationship control adds bounded creative interactions: Mercury phase changes Venus gain by
+at most 15%; Jupiter–Saturn angular separation and calculated Earth–Mars distance increase filter
+resonance; relative longitudes add at most ±6 cents of detune; and planet pairs within 15° of
+conjunction produce a smooth crescendo of at most 35%. Hidden, muted, and non-soloed planets do
+not participate. These mappings use real quantities but are artistic transformations—not
+physically occurring acoustic interactions.
+
 ## Musical playback
 
 Candidate pitch starts from the scientific mapping above, then optionally quantizes to a chromatic scale, a major scale, a natural minor scale, or a pentatonic scale. The root note is selectable. Turning quantization off leaves the scientific candidate. Random chord progressions are not used.

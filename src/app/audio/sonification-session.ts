@@ -44,7 +44,7 @@ export class SonificationSession {
     const audioNow = this.audio.currentTime();
     this.capture.captureTempo(audioNow, snapshot.tempoBpm);
     this.audio.setMix(snapshot.masterGain, snapshot.reverb, snapshot.delay);
-    if (!playing || !snapshot.drones) {
+    if (!playing || snapshot.texture === 'event') {
       this.audio.silenceDrones();
       this.capture.captureDrones(audioNow, time, []);
       return;
@@ -63,6 +63,8 @@ export class SonificationSession {
       audioNow,
       playing: true,
       dronesEnabled: true,
+      eventEnabled: false,
+      relationshipAmount: snapshot.relationshipAmount,
       pulsesEnabled: false,
       alignmentsEnabled: false,
       tempoBpm: snapshot.tempoBpm,
@@ -101,6 +103,8 @@ export class SonificationSession {
       audioNow: this.audio.currentTime(),
       playing: false,
       dronesEnabled: false,
+      eventEnabled: snapshot.texture !== 'continuous',
+      relationshipAmount: snapshot.relationshipAmount,
       pulsesEnabled: snapshot.pulses,
       alignmentsEnabled: snapshot.alignments,
       tempoBpm: snapshot.tempoBpm,
