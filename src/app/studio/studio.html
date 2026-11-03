@@ -140,6 +140,11 @@
     @if (audio.error(); as audioError) {
       <p class="caution" role="alert">{{ audioError }}</p>
     }
+    @if (loadingInstruments(); as loadingNames) {
+      <p class="note" aria-live="polite">
+        Loading recordings: {{ loadingNames }}. A synth stands in until they arrive.
+      </p>
+    }
     <div class="sound-controls">
       <label class="stack-field">
         Listening
@@ -332,8 +337,10 @@
     <h3>Export</h3>
     <p class="lede">
       The spectral image draws the sounding hertz across the span, with ticks where a meridian
-      pulse or alignment would play. Sheet music writes the nearest staff note to that hertz and
-      says so on the page. Open the MusicXML file in a notation program.
+      pulse or alignment would play. Sheet music downloads as a PDF score in 4/4, ready to send
+      to players. Each planet is a part, named with its instrument in musical mode. A crossing is
+      a quarter or an eighth; the other beats are rests. The first page states how many simulated
+      days one quarter note lasts.
     </p>
     <div class="export-row">
       <label class="stack-field">
@@ -348,7 +355,7 @@
         />
       </label>
       <button type="button" (click)="exportSpectrum()">Spectral image</button>
-      <button type="button" (click)="exportSheet()">Sheet music</button>
+      <button type="button" (click)="exportSheet()">Sheet music (PDF)</button>
     </div>
 
     <h3>Crossings</h3>

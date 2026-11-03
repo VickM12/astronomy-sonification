@@ -4,7 +4,21 @@ export type ListenMode = 'scientific' | 'musical';
 export type MappingMode = 'uniform' | 'octave-fold';
 export type PitchMotion = 'fixed' | 'velocity';
 export type ScaleId = 'chromatic' | 'major' | 'natural-minor' | 'pentatonic';
-export type InstrumentId = 'sine' | 'pad' | 'bell' | 'pluck' | 'bass';
+export type InstrumentId =
+  | 'sine'
+  | 'pad'
+  | 'bell'
+  | 'pluck'
+  | 'bass'
+  | 'strings'
+  | 'cello'
+  | 'flute'
+  | 'bassoon'
+  | 'clarinet'
+  | 'horn'
+  | 'trumpet'
+  | 'harp'
+  | 'piano';
 export type RegisterId = 'low' | 'middle' | 'high';
 
 export interface PitchSettings {
@@ -47,6 +61,15 @@ export const INSTRUMENTS = [
   { id: 'bell', label: 'Bell' },
   { id: 'pluck', label: 'Pluck' },
   { id: 'bass', label: 'Deep bass' },
+  { id: 'strings', label: 'Strings' },
+  { id: 'cello', label: 'Cello' },
+  { id: 'flute', label: 'Flute' },
+  { id: 'bassoon', label: 'Bassoon' },
+  { id: 'clarinet', label: 'Clarinet' },
+  { id: 'horn', label: 'French horn' },
+  { id: 'trumpet', label: 'Trumpet' },
+  { id: 'harp', label: 'Harp' },
+  { id: 'piano', label: 'Piano' },
 ] as const;
 
 export const ROOTS = [
@@ -105,6 +128,10 @@ export function isScaleId(value: string): value is ScaleId {
 
 export function isInstrumentId(value: string): value is InstrumentId {
   return INSTRUMENT_IDS.includes(value as InstrumentId);
+}
+
+export function instrumentLabel(instrument: InstrumentId): string {
+  return INSTRUMENTS.find((item) => item.id === instrument)?.label ?? instrument;
 }
 
 export function scaleLabel(scale: ScaleId): string {

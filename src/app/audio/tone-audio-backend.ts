@@ -1,24 +1,216 @@
-import type { AmplitudeEnvelope, FeedbackDelay, Gain, Limiter, Oscillator, Reverb } from 'tone';
+import type {
+  AmplitudeEnvelope,
+  FeedbackDelay,
+  Filter,
+  Gain,
+  Limiter,
+  Oscillator,
+  Reverb,
+  Sampler,
+  ToneAudioBuffer,
+  ToneAudioBuffers,
+} from 'tone';
 import { DroneInstruction, PulseInstruction } from '../sonification/plan';
 import { InstrumentId } from '../sonification/sound-model';
 import { AudioBackend } from './audio-backend';
+import {
+  SAMPLE_BASE_URL,
+  SAMPLED_INSTRUMENTS,
+  SampledInstrument,
+  sampleUrls,
+} from './sample-library';
 
 type ToneModule = typeof import('tone');
-type Wave = 'sine' | 'triangle' | 'square';
+type ToneOscillatorType = Oscillator['type'];
 
-interface Voice {
+/** A sustained synth voice: oscillator → lowpass → gain. */
+interface SynthVoice {
+  kind: 'synth';
   instrument: InstrumentId;
   oscillator: Oscillator;
+  filter: Filter;
   gain: Gain;
   fresh: boolean;
   lastHz: number;
   lastGain: number;
 }
 
+/**
+ * A sustained recorded voice. Recordings end, so a held note is re-struck a
+ * little before the previous stroke fades: a new bow, a new breath.
+ */
+interface SampledVoice {
+  kind: 'sampled';
+  instrument: InstrumentId;
+  sampler: Sampler;
+  gain: Gain;
+  nextBow: number;
+  lastHz: number;
+  lastGain: number;
+}
+
+type Voice = SynthVoice | SampledVoice;
+
 interface LivePulse {
   stopAt: number;
   nodes: { dispose(): unknown }[];
 }
+
+interface SampleSet {
+  buffers: ToneAudioBuffers;
+  loaded: boolean;
+  failed: boolean;
+  pulses: Sampler | null;
+}
+
+/**
+ * One timbre per synth instrument. `wave` is the oscillator type, `cutoff` is
+ * the lowpass corner as a multiple of the sounding pitch (so brightness tracks
+ * register), and the envelope is applied to pulses. Drones use wave and filter.
+ * Instruments listed in SAMPLED_INSTRUMENTS use recordings once those have
+ * loaded; this patch plays until then.
+ */
+export interface Timbre {
+  wave: ToneOscillatorType;
+  cutoff: number;
+  resonance: number;
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+}
+
+export const TIMBRES: Readonly<Record<InstrumentId, Timbre>> = {
+  sine: {
+    wave: 'sine',
+    cutoff: 12,
+    resonance: 0,
+    attack: 0.01,
+    decay: 0.28,
+    sustain: 0,
+    release: 0.16,
+  },
+  pad: {
+    wave: 'triangle',
+    cutoff: 6,
+    resonance: 0,
+    attack: 0.08,
+    decay: 0.35,
+    sustain: 0.15,
+    release: 0.45,
+  },
+  bell: {
+    wave: 'triangle',
+    cutoff: 10,
+    resonance: 0,
+    attack: 0.005,
+    decay: 1.1,
+    sustain: 0,
+    release: 0.4,
+  },
+  pluck: {
+    wave: 'square',
+    cutoff: 5,
+    resonance: 0.5,
+    attack: 0.004,
+    decay: 0.16,
+    sustain: 0,
+    release: 0.08,
+  },
+  bass: {
+    wave: 'sine',
+    cutoff: 8,
+    resonance: 0,
+    attack: 0.012,
+    decay: 0.32,
+    sustain: 0,
+    release: 0.22,
+  },
+  strings: {
+    wave: 'sawtooth16',
+    cutoff: 5,
+    resonance: 0.3,
+    attack: 0.14,
+    decay: 0.2,
+    sustain: 0.7,
+    release: 0.5,
+  },
+  cello: {
+    wave: 'sawtooth12',
+    cutoff: 4,
+    resonance: 0.5,
+    attack: 0.1,
+    decay: 0.2,
+    sustain: 0.7,
+    release: 0.45,
+  },
+  flute: {
+    wave: 'sine',
+    cutoff: 3,
+    resonance: 0.2,
+    attack: 0.07,
+    decay: 0.1,
+    sustain: 0.8,
+    release: 0.25,
+  },
+  bassoon: {
+    wave: 'sawtooth8',
+    cutoff: 5,
+    resonance: 1.4,
+    attack: 0.05,
+    decay: 0.1,
+    sustain: 0.75,
+    release: 0.2,
+  },
+  clarinet: {
+    wave: 'square8',
+    cutoff: 3,
+    resonance: 0.6,
+    attack: 0.05,
+    decay: 0.1,
+    sustain: 0.8,
+    release: 0.22,
+  },
+  horn: {
+    wave: 'sawtooth6',
+    cutoff: 2.5,
+    resonance: 0.8,
+    attack: 0.06,
+    decay: 0.15,
+    sustain: 0.75,
+    release: 0.35,
+  },
+  trumpet: {
+    wave: 'sawtooth',
+    cutoff: 8,
+    resonance: 1.2,
+    attack: 0.03,
+    decay: 0.12,
+    sustain: 0.8,
+    release: 0.18,
+  },
+  harp: {
+    wave: 'triangle8',
+    cutoff: 6,
+    resonance: 0.2,
+    attack: 0.003,
+    decay: 0.9,
+    sustain: 0,
+    release: 0.3,
+  },
+  piano: {
+    wave: 'triangle6',
+    cutoff: 7,
+    resonance: 0.2,
+    attack: 0.004,
+    decay: 1.2,
+    sustain: 0,
+    release: 0.4,
+  },
+};
+
+/** Overlap between one stroke of a sustained recording and the next. */
+const BOW_OVERLAP_SECONDS = 0.5;
 
 /**
  * Tone.js graph. Pulses are scheduled with Tone.now(), which reads the audio clock.
@@ -36,6 +228,7 @@ export class ToneAudioBackend implements AudioBackend {
   private reverbSend: Gain | null = null;
   private delaySend: Gain | null = null;
   private readonly voices = new Map<string, Voice>();
+  private readonly samples = new Map<InstrumentId, SampleSet>();
   private pulses: LivePulse[] = [];
   private mix = { master: Number.NaN, reverb: Number.NaN, delay: Number.NaN };
 
@@ -66,6 +259,13 @@ export class ToneAudioBackend implements AudioBackend {
 
   currentTime(): number {
     return this.tone?.now() ?? 0;
+  }
+
+  /** Instruments whose recordings are still downloading. */
+  loadingInstruments(): InstrumentId[] {
+    return [...this.samples.entries()]
+      .filter(([, set]) => !set.loaded && !set.failed)
+      .map(([id]) => id);
   }
 
   setMix(masterGain: number, reverb: number, delay: number): void {
@@ -129,18 +329,38 @@ export class ToneAudioBackend implements AudioBackend {
     }
     const tone = this.tone;
     const when = Math.max(pulse.when, tone.now());
-    const oscillator = new tone.Oscillator(safeHz(pulse.frequencyHz), waveform(pulse.instrument));
-    const envelope = new tone.AmplitudeEnvelope(envelopeFor(pulse.instrument));
-    const gain = new tone.Gain(Math.max(0, pulse.gain));
-    oscillator.connect(envelope);
+    const frequency = safeHz(pulse.frequencyHz);
+    const duration = Math.max(0.05, pulse.durationSeconds);
+    const level = Math.max(0, pulse.gain);
+
+    const recorded = this.recordedSampler(pulse.instrument);
+    if (recorded) {
+      const release = SAMPLED_INSTRUMENTS[pulse.instrument]?.release ?? 0.3;
+      recorded.triggerAttackRelease(frequency, duration, when, clampUnit(level));
+      this.pulses.push({ stopAt: when + duration + release, nodes: [] });
+      return;
+    }
+
+    const timbre = TIMBRES[pulse.instrument];
+    const oscillator = new tone.Oscillator(frequency, timbre.wave);
+    const filter = new tone.Filter(cutoffHz(frequency, timbre), 'lowpass');
+    filter.Q.value = timbre.resonance;
+    const envelope = new tone.AmplitudeEnvelope({
+      attack: timbre.attack,
+      decay: timbre.decay,
+      sustain: timbre.sustain,
+      release: timbre.release,
+    });
+    const gain = new tone.Gain(level * loudnessTrim(timbre));
+    oscillator.connect(filter);
+    filter.connect(envelope);
     envelope.connect(gain);
     gain.connect(this.bus);
-    const duration = Math.max(0.05, pulse.durationSeconds);
     oscillator.start(when);
     envelope.triggerAttackRelease(duration, when);
-    const stopAt = when + duration + 0.45;
+    const stopAt = when + duration + Math.max(0.45, timbre.release + 0.1);
     oscillator.stop(stopAt);
-    this.pulses.push({ stopAt, nodes: [oscillator, envelope, gain] });
+    this.pulses.push({ stopAt, nodes: [oscillator, filter, envelope, gain] });
   }
 
   cutPulses(): void {
@@ -150,6 +370,9 @@ export class ToneAudioBackend implements AudioBackend {
       }
     }
     this.pulses = [];
+    for (const set of this.samples.values()) {
+      set.pulses?.releaseAll();
+    }
   }
 
   dispose(): void {
@@ -159,10 +382,14 @@ export class ToneAudioBackend implements AudioBackend {
     this.disposed = true;
     this.cutPulses();
     for (const voice of this.voices.values()) {
-      voice.oscillator.dispose();
-      voice.gain.dispose();
+      disposeVoice(voice);
     }
     this.voices.clear();
+    for (const set of this.samples.values()) {
+      set.pulses?.dispose();
+      set.buffers.dispose();
+    }
+    this.samples.clear();
     this.reverb?.dispose();
     this.delay?.dispose();
     this.reverbSend?.dispose();
@@ -176,45 +403,198 @@ export class ToneAudioBackend implements AudioBackend {
     if (!this.tone || !this.bus) {
       return;
     }
+    const wantSampled = this.sampleSet(drone.instrument)?.loaded === true;
     let voice = this.voices.get(drone.planetId);
-    if (!voice) {
-      const oscillator = new this.tone.Oscillator(
-        safeHz(drone.frequencyHz),
-        waveform(drone.instrument),
-      );
-      const gain = new this.tone.Gain(0);
-      oscillator.connect(gain);
-      gain.connect(this.bus);
-      oscillator.start(this.tone.now());
-      voice = {
-        instrument: drone.instrument,
-        oscillator,
-        gain,
-        fresh: true,
-        lastHz: 0,
-        lastGain: Number.NaN,
-      };
-      this.voices.set(drone.planetId, voice);
-    }
-    if (voice.instrument !== drone.instrument) {
-      voice.oscillator.type = waveform(drone.instrument);
-      voice.instrument = drone.instrument;
+    if (
+      voice &&
+      (voice.instrument !== drone.instrument || (voice.kind === 'sampled') !== wantSampled)
+    ) {
+      // Instrument changed, or its recordings just finished loading: rebuild
+      // the voice so the new sound takes over at the current level.
+      disposeVoice(voice);
+      this.voices.delete(drone.planetId);
+      voice = undefined;
     }
     const frequency = safeHz(drone.frequencyHz);
-    const cents =
-      voice.lastHz > 0 ? Math.abs(1200 * Math.log2(frequency / voice.lastHz)) : 1200;
+    if (!voice) {
+      const created = wantSampled
+        ? this.createSampledVoice(drone.instrument)
+        : this.createSynthVoice(drone.instrument, frequency);
+      if (!created) {
+        return;
+      }
+      voice = created;
+      this.voices.set(drone.planetId, voice);
+    }
+    const level = Math.max(0, drone.gain);
+    if (voice.kind === 'synth') {
+      this.tuneSynth(voice, frequency);
+      const trimmed = level * loudnessTrim(TIMBRES[voice.instrument]);
+      if (trimmed !== voice.lastGain) {
+        voice.lastGain = trimmed;
+        voice.gain.gain.rampTo(trimmed, 0.05);
+      }
+      return;
+    }
+    this.bow(voice, frequency, level);
+  }
+
+  private createSynthVoice(instrument: InstrumentId, frequency: number): SynthVoice | null {
+    if (!this.tone || !this.bus) {
+      return null;
+    }
+    const timbre = TIMBRES[instrument];
+    const oscillator = new this.tone.Oscillator(frequency, timbre.wave);
+    const filter = new this.tone.Filter(cutoffHz(frequency, timbre), 'lowpass');
+    filter.Q.value = timbre.resonance;
+    const gain = new this.tone.Gain(0);
+    oscillator.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.bus);
+    oscillator.start(this.tone.now());
+    return {
+      kind: 'synth',
+      instrument,
+      oscillator,
+      filter,
+      gain,
+      fresh: true,
+      lastHz: 0,
+      lastGain: Number.NaN,
+    };
+  }
+
+  private createSampledVoice(instrument: InstrumentId): SampledVoice | null {
+    const set = this.sampleSet(instrument);
+    const spec = SAMPLED_INSTRUMENTS[instrument];
+    if (!this.tone || !this.bus || !set?.loaded || !spec) {
+      return null;
+    }
+    const sampler = this.samplerFrom(set.buffers, spec);
+    const gain = new this.tone.Gain(0);
+    sampler.connect(gain);
+    gain.connect(this.bus);
+    return {
+      kind: 'sampled',
+      instrument,
+      sampler,
+      gain,
+      nextBow: 0,
+      lastHz: 0,
+      lastGain: Number.NaN,
+    };
+  }
+
+  private tuneSynth(voice: SynthVoice, frequency: number): void {
+    const timbre = TIMBRES[voice.instrument];
+    const cents = voice.lastHz > 0 ? Math.abs(1200 * Math.log2(frequency / voice.lastHz)) : 1200;
     // Assign the frequency directly. A glide scheduled on every simulation
     // tick never finishes, and the piled-up fades drive the pitch down to silence.
     if (voice.fresh || cents >= 1) {
       voice.oscillator.frequency.value = frequency;
+      voice.filter.frequency.value = cutoffHz(frequency, timbre);
       voice.fresh = false;
       voice.lastHz = frequency;
     }
-    const level = Math.max(0, drone.gain);
+  }
+
+  /** Keep a recorded note sounding: re-strike before the last stroke fades. */
+  private bow(voice: SampledVoice, frequency: number, level: number): void {
+    if (!this.tone) {
+      return;
+    }
+    const spec = SAMPLED_INSTRUMENTS[voice.instrument];
+    const bowSeconds = spec?.bowSeconds ?? 2.5;
     if (level !== voice.lastGain) {
       voice.lastGain = level;
       voice.gain.gain.rampTo(level, 0.05);
     }
+    if (level <= 0) {
+      return;
+    }
+    const now = this.tone.now();
+    const cents = voice.lastHz > 0 ? Math.abs(1200 * Math.log2(frequency / voice.lastHz)) : 1200;
+    const retune = cents >= 50;
+    if (retune && voice.lastHz > 0) {
+      voice.sampler.releaseAll(now);
+      voice.nextBow = now;
+    }
+    if (now >= voice.nextBow - 0.1) {
+      const when = Math.max(now, voice.nextBow);
+      voice.sampler.triggerAttackRelease(frequency, bowSeconds, when, 0.8);
+      voice.nextBow = when + bowSeconds - BOW_OVERLAP_SECONDS;
+      voice.lastHz = frequency;
+    }
+  }
+
+  /** The shared polyphonic sampler for pulses, or null while recordings load. */
+  private recordedSampler(instrument: InstrumentId): Sampler | null {
+    const set = this.sampleSet(instrument);
+    const spec = SAMPLED_INSTRUMENTS[instrument];
+    if (!set?.loaded || !spec || !this.bus) {
+      return null;
+    }
+    if (!set.pulses) {
+      set.pulses = this.samplerFrom(set.buffers, spec);
+      set.pulses.connect(this.bus);
+    }
+    return set.pulses;
+  }
+
+  /** Begin loading an instrument's recordings on first request. */
+  private sampleSet(instrument: InstrumentId): SampleSet | null {
+    const spec = SAMPLED_INSTRUMENTS[instrument];
+    if (!spec || !this.tone) {
+      return null;
+    }
+    const existing = this.samples.get(instrument);
+    if (existing) {
+      return existing;
+    }
+    // Each file is added on its own so one missing recording costs one note,
+    // and the rest of the instrument still arrives.
+    const buffers = new this.tone.ToneAudioBuffers();
+    const set: SampleSet = { buffers, loaded: false, failed: false, pulses: null };
+    const urls = sampleUrls(spec);
+    let pending = Object.keys(urls).length;
+    let arrived = 0;
+    const settle = (): void => {
+      pending -= 1;
+      if (pending > 0) {
+        return;
+      }
+      if (arrived > 0) {
+        set.loaded = true;
+      } else {
+        set.failed = true;
+      }
+    };
+    for (const [note, file] of Object.entries(urls)) {
+      buffers.add(
+        note,
+        `${SAMPLE_BASE_URL}${spec.folder}/${file}`,
+        () => {
+          arrived += 1;
+          settle();
+        },
+        () => settle(),
+      );
+    }
+    this.samples.set(instrument, set);
+    return set;
+  }
+
+  private samplerFrom(buffers: ToneAudioBuffers, spec: SampledInstrument): Sampler {
+    if (!this.tone) {
+      throw new Error('Audio has not started.');
+    }
+    const samples: Record<string, ToneAudioBuffer> = {};
+    for (const note of spec.notes) {
+      if (buffers.has(note)) {
+        samples[note] = buffers.get(note);
+      }
+    }
+    return new this.tone.Sampler(samples, { release: spec.release, volume: -3 });
   }
 
   private sweepPulses(): void {
@@ -231,34 +611,35 @@ export class ToneAudioBackend implements AudioBackend {
   }
 }
 
-function waveform(instrument: InstrumentId): Wave {
-  if (instrument === 'pad' || instrument === 'bell') {
-    return 'triangle';
+function disposeVoice(voice: Voice): void {
+  if (voice.kind === 'synth') {
+    voice.oscillator.dispose();
+    voice.filter.dispose();
+  } else {
+    voice.sampler.releaseAll();
+    voice.sampler.dispose();
   }
-  if (instrument === 'pluck') {
-    return 'square';
-  }
-  return 'sine';
+  voice.gain.dispose();
 }
 
-function envelopeFor(instrument: InstrumentId): {
-  attack: number;
-  decay: number;
-  sustain: number;
-  release: number;
-} {
-  switch (instrument) {
-    case 'bell':
-      return { attack: 0.005, decay: 1.1, sustain: 0, release: 0.4 };
-    case 'pluck':
-      return { attack: 0.004, decay: 0.16, sustain: 0, release: 0.08 };
-    case 'pad':
-      return { attack: 0.08, decay: 0.35, sustain: 0.15, release: 0.45 };
-    case 'bass':
-      return { attack: 0.012, decay: 0.32, sustain: 0, release: 0.22 };
-    case 'sine':
-      return { attack: 0.01, decay: 0.28, sustain: 0, release: 0.16 };
+/** Lowpass corner that follows the pitch, kept under the oscillator cap. */
+export function cutoffHz(frequencyHz: number, timbre: Timbre): number {
+  return Math.min(12000, Math.max(80, frequencyHz * timbre.cutoff));
+}
+
+/** Sawtooth and square waves carry more energy than a sine at the same gain. */
+export function loudnessTrim(timbre: Timbre): number {
+  const wave = String(timbre.wave);
+  if (wave.startsWith('sawtooth')) {
+    return 0.45;
   }
+  if (wave.startsWith('square')) {
+    return 0.4;
+  }
+  if (wave.startsWith('triangle')) {
+    return 0.75;
+  }
+  return 1;
 }
 
 function safeHz(frequencyHz: number): number {

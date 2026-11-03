@@ -7,7 +7,7 @@ import { createTracks, detectOrbitalEvents } from '../simulation/orbital-events'
 import { heardFrequency } from '../sonification/plan';
 import { readPitches } from '../sonification/pitch';
 import { frequencyToMidi, noteName } from '../sonification/scales';
-import { PitchSettings, PlanetMix } from '../sonification/sound-model';
+import { PitchSettings, PlanetMix, instrumentLabel } from '../sonification/sound-model';
 
 const DISCLAIMER =
   'Written pitches are the nearest equal-tempered notes to the sounding hertz. The lines are those hertz, not a spectrum of a recording.';
@@ -23,6 +23,8 @@ export interface ScoreVoice {
   id: string;
   name: string;
   color: string;
+  /** Instrument label in musical mode. Scientific mode has none; every part is a sine. */
+  instrument?: string;
   points: ScorePoint[];
 }
 
@@ -85,6 +87,7 @@ export function captureSonification(
           id: reading.planetId,
           name: planetName(reading.planetId),
           color: swatch(reading.planetId),
+          ...(options.pitch.mode === 'musical' ? { instrument: instrumentLabel(instrument) } : {}),
           points: [point],
         });
       }
@@ -283,12 +286,12 @@ function holdNotes(points: readonly ScorePoint[]): HeldNote[] {
 
 function noteXml(note: string, quarters: number, tieStart: boolean, tieStop: boolean): string {
   const pitch = spell(note);
-  const type = quarters >= 4 ? 'whole' : quarters === 3 ? 'half' : quarters === 2 ? 'half' : 'quarter';
+  const type =
+    quarters >= 4 ? 'whole' : quarters === 3 ? 'half' : quarters === 2 ? 'half' : 'quarter';
   const dot = quarters === 3 ? '<dot/>' : '';
-  const ties = [
-    tieStop ? '<tie type="stop"/>' : '',
-    tieStart ? '<tie type="start"/>' : '',
-  ].join('');
+  const ties = [tieStop ? '<tie type="stop"/>' : '', tieStart ? '<tie type="start"/>' : ''].join(
+    '',
+  );
   const notations =
     tieStart || tieStop
       ? `<notations>${tieStop ? '<tied type="stop"/>' : ''}${tieStart ? '<tied type="start"/>' : ''}</notations>`
@@ -296,7 +299,7 @@ function noteXml(note: string, quarters: number, tieStart: boolean, tieStop: boo
   return `<note><pitch><step>${pitch.step}</step>${pitch.alter === 0 ? '' : `<alter>${pitch.alter}</alter>`}<octave>${pitch.octave}</octave></pitch><duration>${quarters}</duration>${ties}${dot}<type>${type}</type>${notations}</note>`;
 }
 
-function spell(note: string): { step: string; alter: number; octave: number } {
+export function spell(note: string): { step: string; alter: number; octave: number } {
   const match = /^([A-G])(#?)(-?\d+)$/.exec(note);
   if (!match) {
     return { step: 'C', alter: 0, octave: 4 };
@@ -352,7 +355,11 @@ function isSounding(
 }
 
 function swatch(id: string): string {
-  return PLANETS.find((planet) => planet.id === id)?.swatch ?? MOONS.find((moon) => moon.id === id)?.swatch ?? '#e7eef8';
+  return (
+    PLANETS.find((planet) => planet.id === id)?.swatch ??
+    MOONS.find((moon) => moon.id === id)?.swatch ??
+    '#e7eef8'
+  );
 }
 
 function clampSpan(days: number): number {

@@ -108,7 +108,13 @@ t_audio = t_now + fraction × |Δdays| × compression
 
 Harmony is the set of planetary pitches sounding together. Musical mode first places each planet in its own octave, Neptune lowest and Mercury highest, keeping the pitch class that came from the orbit. A scale change retunes those pitch classes in place. A harmony amount can still move a later planet up by whole octaves when two pitches sit closer than a deterministic semitone gap.
 
-Bell sounds an octave above the candidate. Bass sounds an octave below. Sine, pad, and pluck keep the candidate and change the waveform and the pulse envelope.
+Bell sounds an octave above the candidate. Deep bass and cello sound an octave below. Every other instrument keeps the candidate pitch.
+
+Two kinds of instrument exist. Sine, warm pad, bell, pluck, and deep bass are synth patches in `TIMBRES` (`src/app/audio/tone-audio-backend.ts`): a waveform, a lowpass whose corner is a fixed multiple of the sounding pitch, and an envelope. Strings, cello, flute, bassoon, clarinet, French horn, trumpet, harp, and piano are recordings (`src/app/audio/sample-library.ts`): the tonejs-instruments sample set by N. P. Brosowsky, CC BY 3.0, fetched from the jsDelivr CDN the first time an instrument is chosen, then pitch-shifted by `Tone.Sampler` from the nearest recorded note. While a set downloads, a synth patch of the same family plays and the sound panel says so. Crossing pulses trigger one recorded note. A sustained drone is re-struck every few seconds, overlapping the previous stroke by half a second, which is how a player holds a long tone: a new bow, a new breath. If the download fails the synth patch stays.
+
+This is the one runtime network dependency in the app. Everything else runs from the bundle.
+
+The sheet-music export names each part by its instrument in musical mode. In scientific mode every part is a sine and the parts carry only the planet name.
 
 MIDI cannot store every scientific frequency. When MIDI export exists, the documentation will state the note-number or pitch-bend approximation. Scientific drones remain available as audio even when MIDI is a poor fit. WAV and MIDI export are not in this build.
 

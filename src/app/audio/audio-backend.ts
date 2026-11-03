@@ -14,4 +14,6 @@ export interface AudioBackend {
   schedulePulse(pulse: PulseInstruction): void;
   cutPulses(): void;
   dispose(): void;
+  /** Instruments whose recordings are still downloading. Absent when none are sampled. */
+  loadingInstruments?(): readonly string[];
 }

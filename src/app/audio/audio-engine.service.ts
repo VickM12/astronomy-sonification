@@ -18,6 +18,8 @@ const MAX_LIVE_PULSES = 16;
 export class AudioEngineService {
   readonly error = signal<string | null>(null);
   readonly running = signal(false);
+  /** Instrument ids whose recordings are downloading; a synth patch plays meanwhile. */
+  readonly loading = signal<readonly string[]>([]);
 
   private readonly backend: AudioBackend;
   private disposed = false;
@@ -63,6 +65,11 @@ export class AudioEngineService {
       return;
     }
     this.guard(() => this.backend.syncDrones(drones));
+    const loading = this.backend.loadingInstruments?.() ?? [];
+    const key = loading.join(',');
+    if (key !== this.loading().join(',')) {
+      this.loading.set([...loading]);
+    }
   }
 
   silenceDrones(): void {

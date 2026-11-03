@@ -95,7 +95,7 @@ export function heardFrequency(
   if (mode !== 'musical') {
     return frequencyHz;
   }
-  if (instrument === 'bass') {
+  if (instrument === 'bass' || instrument === 'cello') {
     return frequencyHz / 2;
   }
   if (instrument === 'bell') {

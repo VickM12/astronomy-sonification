@@ -244,7 +244,8 @@ h3 {
 
 .lede,
 .readout,
-.event-log {
+.event-log,
+.note {
   color: var(--muted);
   font-size: 0.86rem;
   line-height: 1.45;

@@ -49,10 +49,10 @@ Status: not started.
 
 ## Milestone 5 — Export
 
-Status: spectral image and MusicXML sheet music are in the observation panel. WAV, MIDI, and JSON presets are not started.
+Status: spectral image and a PDF score download from the observation panel. WAV, MIDI, and JSON presets are not started.
 
 - Spectral SVG of the sounding hertz over a chosen span, with ticks for pulses that would play.
-- MusicXML of the nearest equal-tempered notes, with the approximation written on the score.
+- Sheet music as a PDF written by `src/app/export/score-engraving.ts` with no PDF library: a 4/4 score, one part per sounding planet, quarters and eighths at meridian crossings and alignments, rests elsewhere, Times for words and vector paths for every musical glyph. The first page states the tempo and how many simulated days one quarter note spans. The written pitch is the nearest equal-tempered note, and the page says so.
 - Offline WAV render.
 - MIDI, with the pitch approximation written down.
 - JSON preset import and export.

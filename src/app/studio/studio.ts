@@ -5,12 +5,8 @@ import { AudioEngineService } from '../audio/audio-engine.service';
 import { SonificationSession } from '../audio/sonification-session';
 import { SoundSettingsService } from '../audio/sound-settings.service';
 import { describeOrbitalEvent } from '../domain/orbital-event';
-import {
-  buildMusicXml,
-  buildSpectrumSvg,
-  captureSonification,
-  downloadText,
-} from '../export/sonification-score';
+import { buildScorePdf } from '../export/score-engraving';
+import { buildSpectrumSvg, captureSonification, downloadText } from '../export/sonification-score';
 import { MOONS, isMoonId } from '../domain/moons';
 import { PLANETS, planetName } from '../domain/planets';
 import { findNextAlignment } from '../simulation/find-alignment';
@@ -18,7 +14,15 @@ import { OrbitalSimulationService } from '../simulation/orbital-simulation.servi
 import { formatHz } from '../sonification/frequency';
 import { heardFrequency } from '../sonification/plan';
 import { readPitches } from '../sonification/pitch';
-import { BEATS, INSTRUMENTS, REGISTERS, ROOTS, SCALES } from '../sonification/sound-model';
+import {
+  BEATS,
+  INSTRUMENTS,
+  REGISTERS,
+  ROOTS,
+  SCALES,
+  instrumentLabel,
+  isInstrumentId,
+} from '../sonification/sound-model';
 import { SolarSystemView } from '../visualization/solar-system-view';
 import { loadPreferences, savePreferences } from './preferences';
 
@@ -53,6 +57,15 @@ export class Studio implements OnDestroy {
   protected readonly bodies = computed(() =>
     this.simulation.moonsEnabled() ? [...PLANETS, ...MOONS] : [...PLANETS],
   );
+
+  /** Comma-separated labels of instruments whose recordings are downloading, or null. */
+  protected readonly loadingInstruments = computed(() => {
+    const ids = this.audio.loading();
+    if (ids.length === 0) {
+      return null;
+    }
+    return ids.map((id) => (isInstrumentId(id) ? instrumentLabel(id) : id)).join(', ');
+  });
 
   protected readonly visiblePlanetIds = computed(() => {
     const planets = PLANETS.filter((planet) => !this.hidden().includes(planet.id)).map(
@@ -452,7 +465,7 @@ export class Studio implements OnDestroy {
   protected exportSheet(): void {
     const capture = this.captureScore();
     if (capture) {
-      downloadText('harmonia-mundi-score.musicxml', 'application/vnd.recordare.musicxml+xml', buildMusicXml(capture));
+      downloadText('harmonia-mundi-score.pdf', 'application/pdf', buildScorePdf(capture));
     }
   }
 
@@ -473,7 +486,9 @@ export class Studio implements OnDestroy {
         alignments: this.sound.alignments(),
       });
     } catch (error) {
-      this.simulation.error.set(error instanceof Error ? error.message : 'The score could not be built.');
+      this.simulation.error.set(
+        error instanceof Error ? error.message : 'The score could not be built.',
+      );
       return null;
     }
   }

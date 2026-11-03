@@ -275,10 +275,7 @@ export class SoundSettingsService {
     }
   }
 
-  private assignBoolean(
-    value: unknown,
-    target: { set(value: boolean): void },
-  ): void {
+  private assignBoolean(value: unknown, target: { set(value: boolean): void }): void {
     if (typeof value === 'boolean') {
       target.set(value);
     }
