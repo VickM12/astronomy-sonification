@@ -58,6 +58,7 @@ export interface EngravedToken {
   kind: 'note' | 'rest';
   eighths: number;
   note: string;
+  notes?: string[];
   beam: 'begin' | 'end' | 'none';
 }
 
@@ -125,19 +126,110 @@ export function engraveVoice(capture: SonificationCapture, voiceId: string): Eng
   );
 }
 
-export function engraveScore(capture: SonificationCapture): EngravedSystem[] {
-  const voices = [...capture.voices].sort(
-    (left, right) => (right.points[0]?.midi ?? 0) - (left.points[0]?.midi ?? 0),
+function engraveGrandStaff(
+  capture: SonificationCapture,
+  treble: boolean,
+  measures: number,
+): EngravedToken[][] {
+  if (capture.texture === 'continuous') {
+    return Array.from({ length: measures }, (_, measure) => {
+      const beat = measure * 4;
+      const notes = capture.voices
+        .map((voice) => nearestPoint(voice, beat))
+        .filter((point) => point.midi >= 60 === treble)
+        .map((point) => point.note)
+        .sort((left, right) => spellMidi(left) - spellMidi(right));
+      return notes.length
+        ? [
+            {
+              kind: 'note' as const,
+              eighths: 8,
+              note: notes[0] ?? 'C4',
+              notes,
+              beam: 'none' as const,
+            },
+          ]
+        : [{ kind: 'rest' as const, eighths: 8, note: '', beam: 'none' as const }];
+    });
+  }
+
+  const slots: string[][] = Array.from({ length: measures * 8 }, () => []);
+  const span = capture.spanDays || 1;
+  for (const mark of capture.marks) {
+    const index =
+      mark.beat === undefined
+        ? Math.min(slots.length - 1, Math.max(0, Math.floor((mark.day / span) * slots.length)))
+        : Math.min(slots.length - 1, Math.max(0, Math.floor(mark.beat * 2)));
+    for (const id of mark.bodyIds) {
+      const voice = capture.voices.find((item) => item.id === id);
+      if (!voice) {
+        continue;
+      }
+      const coordinate = mark.beat ?? mark.day;
+      const point = nearestPoint(voice, coordinate);
+      if (point.midi >= 60 !== treble) {
+        continue;
+      }
+      const note = writtenNote(voice, coordinate);
+      const slot = slots[index];
+      if (slot && !slot.includes(note)) {
+        slot.push(note);
+        slot.sort((left, right) => spellMidi(left) - spellMidi(right));
+      }
+    }
+  }
+  return Array.from({ length: measures }, (_, measure) =>
+    spellChordMeasure(slots.slice(measure * 8, measure * 8 + 8)),
   );
+}
+
+function spellChordMeasure(slots: readonly string[][]): EngravedToken[] {
+  const tokens = spellMeasure(slots.map((notes) => notes[0] ?? null));
+  let cursor = 0;
+  return tokens.map((token) => {
+    const notes = token.kind === 'note' ? (slots[cursor] ?? []) : [];
+    const next =
+      token.kind === 'note' && notes.length > 0
+        ? { ...token, note: notes[0] ?? token.note, notes }
+        : token;
+    cursor += token.eighths;
+    return next;
+  });
+}
+
+function spellMidi(note: string): number {
+  const value = spell(note);
+  const semitone: Readonly<Record<string, number>> = {
+    C: 0,
+    D: 2,
+    E: 4,
+    F: 5,
+    G: 7,
+    A: 9,
+    B: 11,
+  };
+  return (value.octave + 1) * 12 + (semitone[value.step] ?? 0) + value.alter;
+}
+
+export function engraveScore(capture: SonificationCapture): EngravedSystem[] {
   const measures = scoreMeasureCount(capture);
   const quarterDays = capture.spanDays / (measures * 4);
-  const parts: PartLayout[] = voices.map((voice) => {
-    const bars = engraveVoice(capture, voice.id);
-    const treble = (voice.points[0]?.midi ?? 60) >= 60;
+  const parts: PartLayout[] = [true, false].map((treble) => {
+    const bars = engraveGrandStaff(capture, treble, measures);
+    const voices = capture.voices.filter((voice) =>
+      voice.points.some((point) => point.midi >= 60 === treble),
+    );
+    const voice: ScoreVoice = {
+      id: treble ? 'score-treble' : 'score-bass',
+      name: treble ? 'Treble' : 'Bass',
+      color: treble ? '#6aa6e6' : '#d4a574',
+      instrument: `${voices.length} planet ${voices.length === 1 ? 'voice' : 'voices'}`,
+      points: voices.flatMap((item) => item.points),
+    };
     const positions = bars
       .flat()
       .filter((token) => token.kind === 'note')
-      .map((token) => staffPosition(token.note, treble));
+      .flatMap((token) => (token.notes ?? [token.note]).map((note) => staffPosition(note, treble)));
     const pads = staffPads(positions);
     return { voice, treble, bars, above: pads.above, below: pads.below };
   });
@@ -381,7 +473,7 @@ function renderSystem(
   quarterDays: number,
   last: boolean,
 ): EngravedSystem {
-  const header = first ? 96 : 28;
+  const header = first ? 124 : 28;
   const right = STAFF_LEFT + measureCount * MEASURE_W;
   const shapes: Shape[] = [];
   let cursor = header + 16;
@@ -410,6 +502,8 @@ function renderSystem(
         QUIET,
       ),
     );
+    shapes.push(text(48, 102, `Treble: ${staffLegend(capture, true)}`, 10, QUIET));
+    shapes.push(text(48, 116, `Bass: ${staffLegend(capture, false)}`, 10, QUIET));
     shapes.push(
       text(
         48,
@@ -426,10 +520,10 @@ function renderSystem(
         48,
         86,
         capture.texture === 'continuous'
-          ? 'Whole notes are the recorded continuous voices. Pitch changes re-articulate at the next bar. Pitches are nearest equal-tempered notes.'
+          ? 'Planet pitches share a grand staff: C4 and above in treble, below C4 in bass. Whole notes show continuous voices.'
           : capture.texture === 'hybrid'
-            ? 'Continuous voices sustain beneath written meridian and alignment accents. Pitches are nearest equal-tempered notes.'
-            : 'A note is a meridian crossing or an alignment. Events closer than one eighth share that note. Pitches are nearest equal-tempered notes.',
+            ? 'Planet pitches share treble and bass staves. Continuous voices sustain beneath written event accents.'
+            : 'Planet pitches share treble and bass staves. Notes mark meridian crossings or alignments; simultaneous planets form chords.',
         12,
         QUIET,
       ),
@@ -485,6 +579,16 @@ function renderSystem(
   return { height, shapes };
 }
 
+function staffLegend(capture: SonificationCapture, treble: boolean): string {
+  const entries = capture.voices.flatMap((voice) => {
+    const point = voice.points[0];
+    return point && point.midi >= 60 === treble
+      ? [`${voice.name} ${point.note.replace('#', '♯')}`]
+      : [];
+  });
+  return entries.length > 0 ? entries.join(' · ') : 'rest';
+}
+
 function renderPartStaff(
   part: PartLayout,
   staffTop: number,
@@ -504,11 +608,16 @@ function renderPartStaff(
     part.bars.flat().find((token) => token.kind === 'note')?.note ?? point?.note ?? '';
   const written = firstNote.replace('#', '♯');
   const mid = staffTop + 2 * STAFF_SPACE;
+  const grandStaff = part.voice.id.startsWith('score-');
   shapes.push(rect(16, mid - 18, 9, 9, part.voice.color));
   shapes.push(text(30, mid - 10, part.voice.name, 14, INK, 'italic'));
-  shapes.push(text(30, mid + 4, `${written} · ${hz.toFixed(1)} Hz`, 11, QUIET));
-  if (part.voice.instrument) {
-    shapes.push(text(30, mid + 17, part.voice.instrument, 11, QUIET));
+  if (grandStaff) {
+    shapes.push(text(30, mid + 6, part.voice.instrument || 'Rest', 10, QUIET));
+  } else {
+    shapes.push(text(30, mid + 4, `${written} · ${hz.toFixed(1)} Hz`, 11, QUIET));
+    if (part.voice.instrument) {
+      shapes.push(text(30, mid + 17, part.voice.instrument, 11, QUIET));
+    }
   }
   shapes.push(
     ...(part.treble ? trebleClef(STAFF_LEFT + 22, staffTop) : bassClef(STAFF_LEFT + 14, staffTop)),
@@ -563,7 +672,13 @@ function renderMeasure(
       continue;
     }
     const next = tokens[index + 1];
-    if (token.beam === 'begin' && next?.beam === 'end' && next.kind === 'note') {
+    if (
+      token.beam === 'begin' &&
+      next?.beam === 'end' &&
+      next.kind === 'note' &&
+      (token.notes?.length ?? 1) === 1 &&
+      (next.notes?.length ?? 1) === 1
+    ) {
       shapes.push(
         ...beamedPair(token, next, xAt(cursor), xAt(cursor + token.eighths), treble, yFor, active),
       );
@@ -616,14 +731,23 @@ function singleNote(
   active: Map<string, number>,
 ): Shape[] {
   const whole = token.eighths === 8;
-  const note = placeNote(token.note, x, treble, yFor, active, whole);
+  const names = token.notes?.length ? token.notes : [token.note];
+  const notes = names.map((name, index) =>
+    placeNote(name, x + (index % 2 === 0 ? 0 : 2.5), treble, yFor, active, whole),
+  );
+  const note = notes[0] ?? placeNote(token.note, x, treble, yFor, active, whole);
+  const noteShapes = notes.flatMap((placed) => placed.shapes);
   if (whole) {
-    return note.shapes;
+    return noteShapes;
   }
-  const down = note.position >= 4;
-  const stemX = down ? note.x - 5.2 : note.x + 5.2;
-  const stemY = down ? note.y + 28 : note.y - 28;
-  const shapes = [...note.shapes, line(stemX, note.y, stemX, stemY, 1.15)];
+  const average = notes.reduce((sum, placed) => sum + placed.position, 0) / notes.length;
+  const down = average >= 4;
+  const stemNote = down
+    ? notes.reduce((best, placed) => (placed.y < best.y ? placed : best), note)
+    : notes.reduce((best, placed) => (placed.y > best.y ? placed : best), note);
+  const stemX = down ? stemNote.x - 5.2 : stemNote.x + 5.2;
+  const stemY = down ? stemNote.y + 28 : stemNote.y - 28;
+  const shapes = [...noteShapes, line(stemX, stemNote.y, stemX, stemY, 1.15)];
   if (token.eighths === 1) {
     shapes.push(eighthFlag(stemX, stemY, down));
   }

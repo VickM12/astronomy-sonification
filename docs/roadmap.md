@@ -58,7 +58,10 @@ not started.
 - A Start/Stop recorder captures the post-limiter stereo mix for up to five minutes. All four
   exports use that same take, including live pitch, mix, visibility, instrument, and tempo changes.
 - Spectral SVG of the recorded sounding hertz, with ticks for pulses that actually played.
-- Sheet music as a PDF written by `src/app/export/score-engraving.ts` with no PDF library: a 4/4 score, one part per sounding planet, quarters and eighths at meridian crossings and alignments, rests elsewhere, Times for words and vector paths for every musical glyph. The first page states the tempo and how many simulated days one quarter note spans. The written pitch is the nearest equal-tempered note, and the page says so.
+- Sheet music as a PDF written by `src/app/export/score-engraving.ts` with no PDF library:
+  one shared grand staff, with planet pitches at C4 and above on treble and lower pitches on bass.
+  Simultaneous planets form chords; crossings use quarters/eighths and continuous takes use whole
+  notes. Times renders words and vector paths draw every musical glyph.
 - Stereo 16-bit PCM WAV from the browser audio graph.
 - Format-1 MIDI with body tracks, tempo changes, drones, pulses, gains, and documented General MIDI
   instrument approximations.

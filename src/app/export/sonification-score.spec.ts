@@ -37,7 +37,8 @@ describe('sonification score export', () => {
     expect(xml).toContain('nearest equal-tempered');
     const scoreSvg = buildScoreSvg(score);
     expect(scoreSvg).toContain('Mercury');
-    expect(scoreSvg).toContain('Hz');
+    expect(scoreSvg).toContain('Treble');
+    expect(scoreSvg).toContain('Bass');
     expect(scoreSvg).toContain('4/4');
     expect(scoreSvg).toContain('Sempre staccato');
     expect(scoreSvg).not.toContain('aligns with');
@@ -68,7 +69,8 @@ describe('sonification score export', () => {
     expect(pdf.trimEnd().endsWith('%%EOF')).toBe(true);
     expect(/[^\x00-\x7f]/.test(pdf)).toBe(false);
     expect(pdf).toContain('/Type /Page ');
-    expect(pdf).toContain('(Mercury) Tj');
+    expect(pdf).toContain('(Treble) Tj');
+    expect(pdf).toContain('(Bass) Tj');
     expect(pdf).toContain('Sempre staccato');
     const count = /\/Count (\d+)/.exec(pdf);
     expect(Number(count?.[1])).toBeGreaterThan(0);
@@ -78,7 +80,7 @@ describe('sonification score export', () => {
     expect(pdf.slice(firstOffset, firstOffset + 7)).toBe('1 0 obj');
   });
 
-  it('labels parts with their instrument in musical mode', () => {
+  it('maps musical planet pitches onto the shared treble and bass staves', () => {
     const mixes = defaultMixes();
     mixes.mars = { ...mixes.mars, instrument: 'horn' };
     const score = captureSonification(astronomy, {
@@ -92,8 +94,9 @@ describe('sonification score export', () => {
       alignments: true,
     });
     expect(score.voices.find((voice) => voice.id === 'mars')?.instrument).toBe('French horn');
-    expect(buildScoreSvg(score)).toContain('French horn');
-    expect(buildScorePdf(score)).toContain('(French horn) Tj');
+    expect(buildScoreSvg(score)).toContain('Treble');
+    expect(buildScoreSvg(score)).toContain('Bass');
+    expect(buildScorePdf(score)).toContain('(Treble) Tj');
   });
 
   it('spells quarters, beamed eighths, and rests that fill a 4/4 bar', () => {
@@ -136,6 +139,6 @@ describe('sonification score export', () => {
     const bars = engraveVoice(score, 'earth');
     expect(bars).toHaveLength(2);
     expect(bars[0]).toEqual([{ kind: 'note', eighths: 8, note: 'A4', beam: 'none' }]);
-    expect(buildScoreSvg(score)).toContain('Whole notes are the recorded continuous voices');
+    expect(buildScoreSvg(score)).toContain('Whole notes show continuous voices');
   });
 });

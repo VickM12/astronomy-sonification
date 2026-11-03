@@ -134,11 +134,12 @@ The recorder taps the stereo signal after the master limiter, so WAV contains th
 that were actually heard. A take is limited to five minutes to bound browser memory. Its event,
 pitch, instrument, gain, and tempo timeline also drives the MIDI, spectral SVG, and PDF score.
 
-The sheet-music export names each part by its instrument and places recorded crossings on the
-captured beat timeline. MIDI rounds sounding hertz to the nearest equal-tempered note, writes one
-track per body, and uses General MIDI program approximations; it cannot reproduce the original
-sample libraries or arbitrary scientific frequencies exactly. The WAV remains the authoritative
-audio recording.
+The sheet-music export places every recorded planet on one grand staff: written C4 and above use
+treble, lower notes use bass, and simultaneous planets form chords. Event notes follow the captured
+beat timeline; continuous takes use whole-note sonorities. MIDI rounds sounding hertz to the nearest
+equal-tempered note, writes one track per body, and uses General MIDI program approximations; it
+cannot reproduce the original sample libraries or arbitrary scientific frequencies exactly. The WAV
+remains the authoritative audio recording.
 
 ## Clocks
 
